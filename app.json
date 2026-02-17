@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Shot Oyunu",
+    "slug": "shot-oyunu",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      }
+    }
+  }
+}
