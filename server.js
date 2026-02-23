@@ -27,12 +27,15 @@ const GIRLS_NEVER_QUESTIONS = [
   'Ben daha önce hiç kız kıza buluşmada drama çıkarmadım.'
 ];
 
+const DARE_BASIC_QUESTIONS = [
+  'Telefonundaki son mesajı gruba oku ya da iç.',
+  'Karşındaki kişiye iltifat et ya da iç.',
+  '10 saniye göz teması kur ya da iç.',
+  'Son aradığın kişiyi ara ve selam ver ya da iç.',
+  'En utanç verici anını anlat ya da iç.'
+];
+
 const DARE_QUESTIONS = [
-  {
-    text: 'Dinozorlar insanlar ile aynı anda yeryüzünde bulunmuştur.',
-    type: 'true_false',
-    answer: false
-  },
   { text: 'Gruptaki en flörtöz içer', type: 'vote' },
   { text: "En çok ex'i olan içsin.", type: 'input_number' },
   { text: 'Seçtiğin kişi içer', type: 'target_select' }
@@ -51,9 +54,15 @@ const MODES = {
     type: 'never',
     questions: GIRLS_NEVER_QUESTIONS
   },
-  dare: {
-    id: 'dare',
+  dare_basic: {
+    id: 'dare_basic',
     label: 'Yap Ya da İç',
+    type: 'dare_basic',
+    questions: DARE_BASIC_QUESTIONS
+  },
+  challenger: {
+    id: 'challenger',
+    label: 'Challenger',
     type: 'dare',
     questions: DARE_QUESTIONS
   }
@@ -171,6 +180,8 @@ function resolveVoteResult(room) {
 function revealVoteNow(roomCode) {
   const room = rooms.get(roomCode);
   if (!room || room.phase !== 'question' || room.modeType !== 'dare' || room.currentQuestionType !== 'vote') return;
+  clearQuestionTimer(room);
+  room.questionDeadline = null;
   room.phase = 'reveal';
   room.currentResult = resolveVoteResult(room);
   emitRoomState(roomCode);
@@ -204,6 +215,8 @@ function resolveInputNumberResult(room) {
 function revealInputNow(roomCode) {
   const room = rooms.get(roomCode);
   if (!room || room.phase !== 'question' || room.modeType !== 'dare' || room.currentQuestionType !== 'input_number') return;
+  clearQuestionTimer(room);
+  room.questionDeadline = null;
   room.phase = 'reveal';
   room.currentResult = resolveInputNumberResult(room);
   emitRoomState(roomCode);
@@ -228,6 +241,8 @@ function resolveTargetSelectResult(room) {
 function revealTargetNow(roomCode) {
   const room = rooms.get(roomCode);
   if (!room || room.phase !== 'question' || room.modeType !== 'dare' || room.currentQuestionType !== 'target_select') return;
+  clearQuestionTimer(room);
+  room.questionDeadline = null;
   room.phase = 'reveal';
   room.currentResult = resolveTargetSelectResult(room);
   emitRoomState(roomCode);
@@ -272,32 +287,6 @@ function pickNextQuestion(room) {
   room.answers.clear();
 }
 
-function resolveTrueFalseResult(room) {
-  if (typeof room.currentQuestionAnswer !== 'boolean') {
-    return 'Doğru cevap tanımlı değil.';
-  }
-  const wrongPlayers = [];
-  room.players.forEach((name, socketId) => {
-    const answer = room.answers.get(socketId);
-    if (typeof answer !== 'boolean') return;
-    if (answer !== room.currentQuestionAnswer) wrongPlayers.push(name);
-  });
-
-  const answerText = room.currentQuestionAnswer ? 'Doğru' : 'Yanlış';
-  if (!wrongPlayers.length) {
-    return `Doğru cevap: ${answerText}. Kimse içmiyor.`;
-  }
-  return `Doğru cevap: ${answerText}. ${wrongPlayers.join(' ve ')} içiyor.`;
-}
-
-function revealTrueFalseNow(roomCode) {
-  const room = rooms.get(roomCode);
-  if (!room || room.phase !== 'question' || room.modeType !== 'dare' || room.currentQuestionType !== 'true_false') return;
-  room.phase = 'reveal';
-  room.currentResult = resolveTrueFalseResult(room);
-  emitRoomState(roomCode);
-}
-
 function buildRevealSequence(room) {
   const sequence = [];
   room.players.forEach((name, socketId) => {
@@ -324,18 +313,56 @@ function startQuestion(roomCode) {
 
   pickNextQuestion(room);
   room.phase = 'question';
-  if (room.modeType === 'dare') {
+  if (room.modeType === 'dare' || room.modeType === 'dare_basic') {
     advanceTurnForNextQuestion(room);
   } else {
     clearCurrentTurn(room);
   }
 
   clearQuestionTimer(room);
+  room.questionDeadline = Date.now() + QUESTION_TIMEOUT_MS;
   if (isNeverMode(room)) {
-    room.questionDeadline = Date.now() + QUESTION_TIMEOUT_MS;
     room.questionTimer = setTimeout(() => revealNow(roomCode), QUESTION_TIMEOUT_MS);
+  } else if (room.currentQuestionType === 'vote') {
+    room.questionTimer = setTimeout(() => revealVoteNow(roomCode), QUESTION_TIMEOUT_MS);
+  } else if (room.currentQuestionType === 'input_number') {
+    room.questionTimer = setTimeout(() => revealInputNow(roomCode), QUESTION_TIMEOUT_MS);
   } else {
     room.questionDeadline = null;
+  }
+
+  emitRoomState(roomCode);
+}
+
+function handlePlayerLeave(socket, roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  room.players.delete(socket.id);
+  room.answers.delete(socket.id);
+
+  if (room.ownerId === socket.id) {
+    room.ownerId = room.players.keys().next().value || null;
+  }
+
+  if (!room.players.size) {
+    clearQuestionTimer(room);
+    clearCurrentTurn(room);
+    rooms.delete(roomCode);
+    return;
+  }
+
+  if ((room.modeType === 'dare' || room.modeType === 'dare_basic') && room.phase === 'question' && room.currentTurnPlayerId === socket.id) {
+    setCurrentTurnFromCursor(room);
+  }
+
+  if (room.phase === 'question') {
+    if (isNeverMode(room)) {
+      if (room.answers.size >= room.players.size) return revealNow(roomCode);
+    } else if (room.modeType === 'dare') {
+      if (room.currentQuestionType === 'vote' && room.answers.size >= room.players.size) return revealVoteNow(roomCode);
+      if (room.currentQuestionType === 'input_number' && room.answers.size >= room.players.size) return revealInputNow(roomCode);
+    }
   }
 
   emitRoomState(roomCode);
@@ -485,22 +512,6 @@ io.on('connection', (socket) => {
     revealTargetNow(roomCode);
   });
 
-  socket.on('submit_true_false', ({ answer }) => {
-    const { roomCode } = socket.data;
-    if (!roomCode) return;
-    const room = rooms.get(roomCode);
-    if (!room || room.phase !== 'question' || room.modeType !== 'dare') return;
-    if (room.currentQuestionType !== 'true_false') return;
-    if (typeof answer !== 'boolean') return;
-
-    room.answers.set(socket.id, answer);
-    emitRoomState(roomCode);
-
-    if (room.answers.size === room.players.size) {
-      revealTrueFalseNow(roomCode);
-    }
-  });
-
   socket.on('force_reveal', () => {
     const { roomCode } = socket.data;
     if (!roomCode) return;
@@ -514,19 +525,33 @@ io.on('connection', (socket) => {
     const { roomCode } = socket.data;
     if (!roomCode) return;
     const room = rooms.get(roomCode);
-    if (!room || room.ownerId !== socket.id) return;
+    if (!room) return;
 
+    // Never mode: herkes swipe ile geçirebilir
     if (isNeverMode(room)) {
-      if (room.phase !== 'reveal') return;
+      if (room.phase !== 'reveal' && room.phase !== 'question') return;
       startQuestion(roomCode);
       return;
     }
+
+    // Dare basic mode: sırası olan veya owner geçirebilir
+    if (room.modeType === 'dare_basic') {
+      if (room.phase !== 'question') return;
+      if (socket.id !== room.currentTurnPlayerId && socket.id !== room.ownerId) return;
+      startQuestion(roomCode);
+      return;
+    }
+
+    // Challenger (dare) mode: sadece owner
+    if (room.ownerId !== socket.id) return;
 
     if (room.phase === 'reveal') {
       startQuestion(roomCode);
       return;
     }
-    if (room.phase === 'question' && room.currentQuestionType !== 'vote') {
+    // question phase'de sadece interaktif olmayan (basic dare) sorularda atlanabilir
+    const interactiveTypes = ['vote', 'input_number', 'target_select'];
+    if (room.phase === 'question' && !interactiveTypes.includes(room.currentQuestionType)) {
       startQuestion(roomCode);
     }
   });
@@ -534,78 +559,15 @@ io.on('connection', (socket) => {
   socket.on('leave_room', () => {
     const { roomCode } = socket.data;
     if (!roomCode) return;
-    const room = rooms.get(roomCode);
-    if (!room) return;
-
-    room.players.delete(socket.id);
-    room.answers.delete(socket.id);
     socket.leave(roomCode);
-
-    if (room.ownerId === socket.id) {
-      room.ownerId = room.players.keys().next().value || null;
-    }
-
-    if (!room.players.size) {
-      clearQuestionTimer(room);
-      clearCurrentTurn(room);
-      rooms.delete(roomCode);
-    } else {
-      if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'target_select' && room.currentTurnPlayerId === socket.id) {
-        setCurrentTurnFromCursor(room);
-      }
-      if (isNeverMode(room) && room.phase === 'question' && room.answers.size === room.players.size) {
-        revealNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'vote' && room.answers.size === room.players.size) {
-        revealVoteNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'input_number' && room.answers.size === room.players.size) {
-        revealInputNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'target_select' && room.answers.size === room.players.size) {
-        revealTargetNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'true_false' && room.answers.size === room.players.size) {
-        revealTrueFalseNow(roomCode);
-      } else {
-        emitRoomState(roomCode);
-      }
-    }
-
+    handlePlayerLeave(socket, roomCode);
     socket.data.roomCode = null;
   });
 
   socket.on('disconnect', () => {
     const { roomCode } = socket.data;
     if (!roomCode) return;
-    const room = rooms.get(roomCode);
-    if (!room) return;
-
-    room.players.delete(socket.id);
-    room.answers.delete(socket.id);
-
-    if (room.ownerId === socket.id) {
-      room.ownerId = room.players.keys().next().value || null;
-    }
-
-    if (!room.players.size) {
-      clearQuestionTimer(room);
-      clearCurrentTurn(room);
-      rooms.delete(roomCode);
-    } else {
-      if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'target_select' && room.currentTurnPlayerId === socket.id) {
-        setCurrentTurnFromCursor(room);
-      }
-      if (isNeverMode(room) && room.phase === 'question' && room.answers.size === room.players.size) {
-        revealNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'vote' && room.answers.size === room.players.size) {
-        revealVoteNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'input_number' && room.answers.size === room.players.size) {
-        revealInputNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'target_select' && room.answers.size === room.players.size) {
-        revealTargetNow(roomCode);
-      } else if (room.modeType === 'dare' && room.phase === 'question' && room.currentQuestionType === 'true_false' && room.answers.size === room.players.size) {
-        revealTrueFalseNow(roomCode);
-      } else {
-        emitRoomState(roomCode);
-      }
-    }
+    handlePlayerLeave(socket, roomCode);
   });
 });
 
