@@ -17,7 +17,7 @@ import {
   View,
 } from "react-native";
 
-LogBox.ignoreAllLogs(true);
+LogBox.ignoreLogs(["Non-serializable values", "Setting a timer", "AsyncStorage", "Possible Unhandled Promise", "SafeAreaView has been deprecated"]);
 import { Component, useCallback, useEffect, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -37,7 +37,13 @@ const SCREENS = {
   DARE_SETUP: "dare_setup",
 };
 
-const SERVER_URL = "http://localhost:3003";
+const getServerUrl = () => {
+  if (Platform.OS === "android") return "http://10.0.2.2:3003"; // Android emulator
+  // Fiziksel cihazda test ediyorsan bilgisayarının local IP'sini yaz:
+  // return "http://192.168.1.X:3003";
+  return "http://localhost:3003";
+};
+const SERVER_URL = getServerUrl();
 
 const CARD_FRAMES = {
   never_normal: require("./assets/card_questions.png"),
@@ -98,6 +104,34 @@ const SOLO_QUESTIONS = {
     'Ben daha önce hiç kimsenin storysine alev atmadım.',
     'Ben daha önce hiç sadece dış görünüşü için birine ilgi duymadım.',
     'Ben daha önce hiç sevgilimle arkadaşımın dedikodusunu yapmadım.',
+    'Ben daha önce hiç yanlış kişiye mesaj gönderdim.',
+    'Ben daha önce hiç karaoke yapmadım.',
+    'Ben daha önce hiç sahte bir bahane uydurdum.',
+    'Ben daha önce hiç birine aşık olduğumu itiraf edemedim.',
+    'Ben daha önce hiç alkollüyken alışveriş yapmadım.',
+    'Ben daha önce hiç bir arkadaşımın sırrını başkasına söylemedim.',
+    'Ben daha önce hiç bir randevuya geç kalmadım.',
+    'Ben daha önce hiç duşta şarkı söylemedim.',
+    'Ben daha önce hiç birinden intikam almadım.',
+    'Ben daha önce hiç bir filmde ağlamadım.',
+    'Ben daha önce hiç yemek yaparken mutfağı yakacak gibi olmadım.',
+    'Ben daha önce hiç halka açık bir yerde düşmedim.',
+    'Ben daha önce hiç gece geç saatte buzdolabını açıp yemek yemedim.',
+    'Ben daha önce hiç bir partide uyuyakalmadım.',
+    'Ben daha önce hiç birinin hediyesini beğenmemiş gibi yapmadım.',
+    'Ben daha önce hiç spor salonuna yazılıp gitmeyeceğim bir üyelik almadım.',
+    'Ben daha önce hiç bir arkadaşımla aynı kişiden hoşlanmadım.',
+    'Ben daha önce hiç sosyal medyada takipçi kasmadım.',
+    'Ben daha önce hiç birine borç verip geri isteyemedim.',
+    'Ben daha önce hiç yanlışlıkla sesli mesaj gönderdim.',
+    'Ben daha önce hiç canım sıkkınken alışveriş yapmadım.',
+    'Ben daha önce hiç birine gizlice hediye almadım.',
+    'Ben daha önce hiç bir tartışmada haklı olduğum halde özür dilemedim.',
+    'Ben daha önce hiç tanımadığım birinden numara istemedim.',
+    'Ben daha önce hiç bir şarkıyı yanlış sözlerle söylemedim.',
+    'Ben daha önce hiç birinin doğum gününü unutmadım.',
+    'Ben daha önce hiç aşırı derecede klostrofobik olmadım.',
+    'Ben daha önce hiç yabancı birine el sallamadım.',
   ],
   never_girls: [
     'Ben daha önce hiç en yakın arkadaşıma sevgili dedikodusu anlatmadım.',
@@ -134,6 +168,20 @@ const SOLO_QUESTIONS = {
     'Ben daha önce hiç göndeme story atmadım.',
     'Ben daha önce hiç sadece dış görünüşü için birine ilgi duymadım.',
     'Ben daha önce hiç birine takıntılı olmadım.',
+    'Ben daha önce hiç makyajsız sokağa çıkmadım.',
+    'Ben daha önce hiç dizi izlerken ağlamadım.',
+    'Ben daha önce hiç alışverişte bütçemi aşmadım.',
+    'Ben daha önce hiç bir erkek için arkadaşımla tartışmadım.',
+    'Ben daha önce hiç sosyal medyada birini kıskandırmak için story paylaşmadım.',
+    'Ben daha önce hiç diyet yapıyorum deyip gizlice atıştırmadım.',
+    'Ben daha önce hiç bir erkekle sadece ilgi görmek için konuşmadım.',
+    'Ben daha önce hiç eski erkek arkadaşımın yeni sevgilisini stalklamadım.',
+    'Ben daha önce hiç güzellik ürünlerine aşırı para harcamadım.',
+    'Ben daha önce hiç bir arkadaşıma onun hakkında dedikodu yapıldığını söylemedim.',
+    'Ben daha önce hiç bir erkeğin mesajını bilerek geç cevaplamadım.',
+    'Ben daha önce hiç kız gecesinde çok fazla içmedim.',
+    'Ben daha önce hiç bir erkeğe hint verip onun anlamasını beklemedim.',
+    'Ben daha önce hiç bir partide bilerek dikkat çekecek kıyafet giymedim.',
   ],
   dare_basic: [
     'Telefonundaki son mesajı gruba oku ya da iç.',
@@ -146,6 +194,40 @@ const SOLO_QUESTIONS = {
     'En çok hoşlandığın kişinin adını söyle ya da iç.',
     'Bir dakika boyunca hiç konuşma ya da iç.',
     'Dans et ya da iç.',
+    'Telefonundaki son DM\'i oku ya da iç.',
+    '30 saniye boyunca tavuk dansı yap ya da iç.',
+    'Sağındaki kişiye sarıl ya da iç.',
+    'En son ağladığın anı anlat ya da iç.',
+    'Telefondaki son aramanı göster ya da iç.',
+    'Gruptaki birine 1-10 arası puan ver ya da iç.',
+    'Bir dakika boyunca göz kırpmadan dur ya da iç.',
+    'En yakın arkadaşına "seni seviyorum" mesajı at ya da iç.',
+    'Instagram\'daki son beğendiğin fotoğrafı göster ya da iç.',
+    'Komik bir fıkra anlat, kimse gülmezse iç.',
+    'Karşındaki kişinin en iyi özelliğini söyle ya da iç.',
+    'Gruptaki en yakışıklı/güzel kişiyi seç ya da iç.',
+    '20 saniye boyunca plank yap ya da iç.',
+    'Son sildiğin mesajı anlat ya da iç.',
+    'Telefon rehberindeki son kişiyi ara ya da iç.',
+    'En utandığın sosyal medya paylaşımını göster ya da iç.',
+    'Bir dakika boyunca aksanla konuş ya da iç.',
+    'Gruptaki birinin taklidi yap, bilinmezse iç.',
+    'En son ne zaman yalan söylediğini itiraf et ya da iç.',
+    'Solundaki kişiye bir meydan okuma ver ya da iç.',
+    'Herkesin önünde 10 şınav çek ya da iç.',
+    'En garip alışkanlığını itiraf et ya da iç.',
+    'Bir şarkının nakaratını söyle ya da iç.',
+    'Annene şimdi "seni çok seviyorum" mesajı at ya da iç.',
+    'Gruptaki birine takma ad tak ya da iç.',
+    'Karşındaki kişiyle selfie çek ya da iç.',
+    'Son YouTube geçmişini göster ya da iç.',
+    'Bir hayvanın sesini çıkar ya da iç.',
+    'Gözlerin kapalı telefona mesaj yaz ve gönder ya da iç.',
+    'En son hangi ünlüyü stalkladığını söyle ya da iç.',
+    'Telefonundaki en eski fotoğrafı göster ya da iç.',
+    'Gruptaki birinin en iyi 3 özelliğini say ya da iç.',
+    'En sevdiğin şarkıyı 10 saniye söyle ya da iç.',
+    'Ayna karşısında en çok yaptığın pozu yap ya da iç.',
   ],
 };
 
@@ -156,85 +238,144 @@ const CARD_TEXT_COLORS = {
   challenger:   { main: "#352060", counter: "#605080" },
 };
 
-/* ── Floating Particle ── */
-function FloatingParticle({ delay = 0, size = 4, startX, color = "#EC4899" }) {
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ── Twinkling Star ── */
+function Star({ x, y, size, delay = 0 }) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const loop = () => {
-      anim.setValue(0);
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 6000 + Math.random() * 4000,
-        easing: Easing.inOut(Easing.sin),
-        useNativeDriver: true,
-        delay,
-      }).start(() => loop());
-    };
-    loop();
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(anim, { toValue: 1, duration: 1200 + Math.random() * 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 1200 + Math.random() * 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.delay(Math.random() * 2000),
+      ])
+    ).start();
   }, []);
 
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [SCREEN_HEIGHT + 20, -40] });
-  const translateX = anim.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: [0, 15, -10, 20, 0] });
-  const opacity = anim.interpolate({ inputRange: [0, 0.1, 0.5, 0.9, 1], outputRange: [0, 0.6, 0.8, 0.4, 0] });
+  const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] });
+  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] });
 
   return (
     <Animated.View
       pointerEvents="none"
       style={{
         position: "absolute",
-        left: startX,
+        left: x,
+        top: y,
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: color,
+        backgroundColor: "#E9D5FF",
         opacity,
-        transform: [{ translateY }, { translateX }],
+        transform: [{ scale }],
+        shadowColor: "#C084FC",
+        shadowOpacity: 0.8,
+        shadowRadius: size * 2,
+        shadowOffset: { width: 0, height: 0 },
       }}
     />
   );
 }
 
-/* ── Premium Background ── */
-function PremiumBackground() {
-  const pulse1 = useRef(new Animated.Value(0)).current;
-  const pulse2 = useRef(new Animated.Value(0)).current;
-
+/* ── Shooting Star ── */
+function ShootingStar({ delay = 0 }) {
+  const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const createPulse = (anim, duration) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      ).start();
+    const shoot = () => {
+      anim.setValue(0);
+      Animated.sequence([
+        Animated.delay(delay + Math.random() * 8000),
+        Animated.timing(anim, { toValue: 1, duration: 700, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      ]).start(() => shoot());
     };
-    createPulse(pulse1, 4000);
-    createPulse(pulse2, 5500);
+    shoot();
   }, []);
 
-  const glow1Opacity = pulse1.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.2] });
-  const glow1Scale = pulse1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
-  const glow2Opacity = pulse2.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.16] });
-  const glow2Scale = pulse2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
+  const startX = Math.random() * SCREEN_WIDTH * 0.6;
+  const startY = Math.random() * SCREEN_HEIGHT * 0.4;
+
+  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [startX, startX + SCREEN_WIDTH * 0.5] });
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [startY, startY + SCREEN_HEIGHT * 0.3] });
+  const opacity = anim.interpolate({ inputRange: [0, 0.2, 0.7, 1], outputRange: [0, 0.8, 0.6, 0] });
+  const scaleX = anim.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 0.3] });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        width: 40,
+        height: 2,
+        borderRadius: 1,
+        backgroundColor: "#D8B4FE",
+        opacity,
+        transform: [{ translateX }, { translateY }, { rotate: "35deg" }, { scaleX }],
+        shadowColor: "#A855F7",
+        shadowOpacity: 1,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 0 },
+      }}
+    />
+  );
+}
+
+/* ── Mor Yıldızlı Arka Plan ── */
+const STARS = Array.from({ length: 35 }, (_, i) => ({
+  id: i,
+  x: Math.random() * SCREEN_WIDTH,
+  y: Math.random() * SCREEN_HEIGHT,
+  size: 1.5 + Math.random() * 3,
+  delay: Math.random() * 4000,
+}));
+
+function PremiumBackground() {
+  const nebulaAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(nebulaAnim, { toValue: 1, duration: 6000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(nebulaAnim, { toValue: 0, duration: 6000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const nebula1Opacity = nebulaAnim.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.25] });
+  const nebula2Opacity = nebulaAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.18] });
+  const nebula1Scale = nebulaAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <ImageBackground
-        source={require("./assets/bg.png")}
+      {/* Koyu mor gradient arka plan */}
+      <LinearGradient
+        colors={["#0B0014", "#1A0533", "#0D0020", "#06000F"]}
+        locations={[0, 0.35, 0.7, 1]}
         style={StyleSheet.absoluteFill}
-        resizeMode="cover"
       />
-      {/* Animated glow orbs */}
-      <Animated.View style={[styles.glowOrb, styles.glowOrb1, { opacity: glow1Opacity, transform: [{ scale: glow1Scale }] }]} />
-      <Animated.View style={[styles.glowOrb, styles.glowOrb2, { opacity: glow2Opacity, transform: [{ scale: glow2Scale }] }]} />
-      <Animated.View style={[styles.glowOrb, styles.glowOrb3, { opacity: glow2Opacity, transform: [{ scale: glow1Scale }] }]} />
 
-      {/* Floating particles */}
-      <FloatingParticle delay={0} size={3} startX={SCREEN_WIDTH * 0.15} color="rgba(236,72,153,0.5)" />
-      <FloatingParticle delay={1200} size={2} startX={SCREEN_WIDTH * 0.4} color="rgba(139,92,246,0.4)" />
-      <FloatingParticle delay={2400} size={4} startX={SCREEN_WIDTH * 0.7} color="rgba(6,182,212,0.4)" />
-      <FloatingParticle delay={3600} size={2.5} startX={SCREEN_WIDTH * 0.9} color="rgba(236,72,153,0.35)" />
-      <FloatingParticle delay={800} size={3} startX={SCREEN_WIDTH * 0.55} color="rgba(168,85,247,0.3)" />
+      {/* Nebula glow'lar */}
+      <Animated.View style={[styles.nebula, styles.nebula1, { opacity: nebula1Opacity, transform: [{ scale: nebula1Scale }] }]} />
+      <Animated.View style={[styles.nebula, styles.nebula2, { opacity: nebula2Opacity }]} />
+      <Animated.View style={[styles.nebula, styles.nebula3, { opacity: nebula1Opacity }]} />
+
+      {/* Yıldızlar */}
+      {STARS.map((s) => (
+        <Star key={s.id} x={s.x} y={s.y} size={s.size} delay={s.delay} />
+      ))}
+
+      {/* Kayan yıldızlar */}
+      <ShootingStar delay={2000} />
+      <ShootingStar delay={7000} />
+      <ShootingStar delay={12000} />
     </View>
   );
 }
@@ -400,11 +541,20 @@ function GameCard({ icon, children, modeId, questionKey, onSwipeLeft, onSwipeRig
     swipeX.setValue(0);
     anim.setValue(0);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    Animated.sequence([
-      Animated.timing(anim, { toValue: 0.6, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.spring(anim, { toValue: 1, speed: 14, bounciness: 4, useNativeDriver: true }),
-    ]).start();
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 500,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
   }, [questionKey]);
+
+  const onSwipeLeftRef = useRef(onSwipeLeft);
+  const onSwipeRightRef = useRef(onSwipeRight);
+  useEffect(() => {
+    onSwipeLeftRef.current = onSwipeLeft;
+    onSwipeRightRef.current = onSwipeRight;
+  });
 
   const panResponder = useRef(
     PanResponder.create({
@@ -413,14 +563,14 @@ function GameCard({ icon, children, modeId, questionKey, onSwipeLeft, onSwipeRig
       onPanResponderMove: (_, g) => { if (!swiped.current) swipeX.setValue(g.dx); },
       onPanResponderRelease: (_, g) => {
         if (swiped.current) return;
-        if (g.dx < -SWIPE_THRESHOLD && onSwipeLeft) {
+        if (g.dx < -SWIPE_THRESHOLD && onSwipeLeftRef.current) {
           swiped.current = true;
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-          Animated.timing(swipeX, { toValue: -SCREEN_WIDTH * 1.5, duration: 250, useNativeDriver: true }).start(() => onSwipeLeft());
-        } else if (g.dx > SWIPE_THRESHOLD && onSwipeRight) {
+          Animated.timing(swipeX, { toValue: -SCREEN_WIDTH * 1.5, duration: 250, useNativeDriver: true }).start(() => onSwipeLeftRef.current());
+        } else if (g.dx > SWIPE_THRESHOLD && onSwipeRightRef.current) {
           swiped.current = true;
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-          Animated.timing(swipeX, { toValue: SCREEN_WIDTH * 1.5, duration: 250, useNativeDriver: true }).start(() => onSwipeRight());
+          Animated.timing(swipeX, { toValue: SCREEN_WIDTH * 1.5, duration: 250, useNativeDriver: true }).start(() => onSwipeRightRef.current());
         } else {
           Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 8, useNativeDriver: true }).start();
         }
@@ -428,12 +578,14 @@ function GameCard({ icon, children, modeId, questionKey, onSwipeLeft, onSwipeRig
     })
   ).current;
 
-  const translateX = anim.interpolate({ inputRange: [0, 0.4, 0.6, 1], outputRange: [320, 40, -8, 0] });
-  const translateY = anim.interpolate({ inputRange: [0, 0.3, 0.6, 1], outputRange: [20, -6, -2, 0] });
-  const rotateY = anim.interpolate({ inputRange: [0, 0.4, 0.7, 1], outputRange: ["-35deg", "-12deg", "3deg", "0deg"] });
-  const rotateZ = anim.interpolate({ inputRange: [0, 0.3, 0.6, 1], outputRange: ["-4deg", "-1.5deg", "0.5deg", "0deg"] });
-  const scale = anim.interpolate({ inputRange: [0, 0.4, 0.7, 1], outputRange: [0.88, 0.96, 1.01, 1] });
-  const opacity = anim.interpolate({ inputRange: [0, 0.15, 0.4], outputRange: [0, 0.7, 1], extrapolate: "clamp" });
+  /* Kart çekme animasyonu - desteden kıvrılarak çıkıyor */
+  const translateX = anim.interpolate({ inputRange: [0, 0.3, 0.6, 0.85, 1], outputRange: [SCREEN_WIDTH * 0.9, SCREEN_WIDTH * 0.25, -12, 4, 0] });
+  const translateY = anim.interpolate({ inputRange: [0, 0.3, 0.6, 0.85, 1], outputRange: [60, 20, -8, 2, 0] });
+  const rotateY = anim.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: ["-55deg", "-35deg", "-10deg", "4deg", "0deg"] });
+  const rotateZ = anim.interpolate({ inputRange: [0, 0.3, 0.6, 0.85, 1], outputRange: ["-8deg", "-5deg", "-1deg", "0.5deg", "0deg"] });
+  const scale = anim.interpolate({ inputRange: [0, 0.3, 0.7, 0.9, 1], outputRange: [0.75, 0.88, 0.98, 1.02, 1] });
+  const opacity = anim.interpolate({ inputRange: [0, 0.1, 0.35], outputRange: [0, 0.6, 1], extrapolate: "clamp" });
+  const skewY = anim.interpolate({ inputRange: [0, 0.3, 0.6, 1], outputRange: ["6deg", "3deg", "-1deg", "0deg"] });
   const swipeRotate = swipeX.interpolate({ inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH], outputRange: ["-15deg", "0deg", "15deg"] });
 
   const cardFrame = modeId && CARD_FRAMES[modeId] ? CARD_FRAMES[modeId] : null;
@@ -446,11 +598,12 @@ function GameCard({ icon, children, modeId, questionKey, onSwipeLeft, onSwipeRig
       {
         opacity,
         transform: [
-          { perspective: 1200 },
+          { perspective: 800 },
           { translateX },
           { translateY },
           { rotateY },
           { rotateZ },
+          { skewY },
           { scale },
         ]
       }
@@ -697,9 +850,37 @@ function AppContent() {
 
   /* ── socket setup ── */
   useEffect(() => {
-    const socket = io(SERVER_URL, { transports: ["websocket"], autoConnect: true });
+    const socket = io(SERVER_URL, {
+      transports: ["websocket"],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
     socketRef.current = socket;
-    socket.on("connect", () => setMyId(socket.id));
+    socket.on("connect", () => {
+      console.log("[socket] connected:", socket.id);
+      setMyId(socket.id);
+    });
+    socket.on("connect_error", (err) => {
+      console.log("[socket] connect_error:", err.message);
+      showToast("Sunucuya bağlanılamıyor. Server çalışıyor mu?");
+    });
+    socket.on("disconnect", (reason) => {
+      console.log("[socket] disconnected:", reason);
+      if (reason !== "io client disconnect") {
+        showToast("Bağlantı koptu, yeniden bağlanılıyor...");
+      }
+    });
+    socket.io.on("reconnect", () => {
+      console.log("[socket] reconnected:", socket.id);
+      setMyId(socket.id);
+      showToast("Bağlantı yeniden kuruldu!", "success");
+    });
+    socket.io.on("reconnect_failed", () => {
+      showToast("Sunucuya bağlanılamıyor. İnternetini kontrol et.");
+    });
 
     const applyState = (payload) => {
       setActiveRoomCode(payload.roomCode || "");
@@ -820,11 +1001,12 @@ function AppContent() {
       showToast("Bu mod için henüz soru eklenmedi.");
       return;
     }
+    const shuffled = shuffleArray(questions);
     setSoloModeId(mode.id);
     setModeLabel(mode.label);
-    setSoloQuestions([...questions]);
+    setSoloQuestions(shuffled);
     setSoloQuestionIndex(0);
-    setSoloCurrentQuestion(questions[0]);
+    setSoloCurrentQuestion(shuffled[0]);
     setQuestionNum(1);
     navigateTo(SCREENS.SOLO_GAME);
   };
@@ -876,10 +1058,11 @@ function AppContent() {
       showToast("Bu mod için henüz soru eklenmedi.");
       return;
     }
+    const shuffled = shuffleArray(questions);
     setSoloModeId("dare_basic");
-    setSoloQuestions([...questions]);
+    setSoloQuestions(shuffled);
     setSoloQuestionIndex(0);
-    setSoloCurrentQuestion(questions[0]);
+    setSoloCurrentQuestion(shuffled[0]);
     setQuestionNum(1);
     const randomPlayer = darePlayerNames[Math.floor(Math.random() * darePlayerNames.length)];
     setCurrentDarePlayer(randomPlayer);
@@ -965,9 +1148,9 @@ function AppContent() {
           {selectedMode && (
             <>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>ISMIN</Text>
+                <Text style={styles.inputLabel}>İSMİN</Text>
                 <TextInput
-                  placeholder="Adini gir..."
+                  placeholder="Adını gir..."
                   placeholderTextColor="#52525B"
                   value={playerName}
                   onChangeText={setPlayerName}
@@ -1055,9 +1238,6 @@ function AppContent() {
             <View style={styles.modeCardTextWrap}>
               <Text style={styles.modeCardTitle}>Challenger</Text>
               <Text style={styles.modeCardDesc}>Oylama, sayı yarışı, hedef seçme</Text>
-              <View style={[styles.playerBadge, styles.playerBadgeCyan]}>
-                <Text style={[styles.playerBadgeText, { color: "#22D3EE" }]}>3-8 oyuncu</Text>
-              </View>
             </View>
           </Pressable>
         </View>
@@ -1070,7 +1250,7 @@ function AppContent() {
         <View style={styles.stack}>
           {/* Input + Add - always visible at top */}
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>OYUNCU ISMI</Text>
+            <Text style={styles.inputLabel}>OYUNCU İSMİ</Text>
             <View style={styles.inputRow}>
               <TextInput
                 placeholder="İsim gir..."
@@ -1366,7 +1546,7 @@ function AppContent() {
 
               {questionType === "input_number" && (
                 <GlassCard>
-                  <Text style={styles.sectionLabel}>SAYINI GIR</Text>
+                  <Text style={styles.sectionLabel}>SAYINI GİR</Text>
                   <ShimmerLine />
                   <TextInput
                     placeholder="0"
@@ -1382,7 +1562,7 @@ function AppContent() {
 
               {questionType === "target_select" && isMyTurn && (
                 <GlassCard>
-                  <Text style={styles.sectionLabel}>BIRINI SEÇ</Text>
+                  <Text style={styles.sectionLabel}>BİRİNİ SEÇ</Text>
                   <ShimmerLine />
                   {playerEntries.filter((p) => p.id !== myId).map((p) => (
                     <GameButton key={p.id} label={p.name} onPress={() => submitTarget(p.id)} variant="secondary" />
@@ -1509,32 +1689,50 @@ function AppContent() {
   );
 }
 
+/* ── Animated Letter ── */
+function AnimatedLetter({ char, index, anims }) {
+  const anim = anims[index];
+  const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const translateY = anim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [18, -3, 0] });
+  const scale = anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.5, 1.1, 1] });
+
+  return (
+    <Animated.Text style={[splashStyles.titleChar, { opacity, transform: [{ translateY }, { scale }] }]}>
+      {char === " " ? "  " : char}
+    </Animated.Text>
+  );
+}
+
 /* ── Splash Screen ── */
+const SPLASH_TEXT = "Hadi partiye başlayalım";
+
 function SplashScreen({ onFinish }) {
   const logoScale = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
-  const titleOpacity = useRef(new Animated.Value(0)).current;
-  const titleTranslateY = useRef(new Animated.Value(30)).current;
   const fadeOut = useRef(new Animated.Value(1)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
 
+  const letterAnims = useRef(SPLASH_TEXT.split("").map(() => new Animated.Value(0))).current;
+
   useEffect(() => {
+    // Harf animasyonları - her harf 40ms arayla geliyor
+    const letterSequence = letterAnims.map((anim, i) =>
+      Animated.timing(anim, { toValue: 1, duration: 280, delay: i * 40, useNativeDriver: true, easing: Easing.out(Easing.back(1.5)) })
+    );
+
     Animated.sequence([
       Animated.delay(300),
-      // Logo yoktan var oluyor
+      // Logo
       Animated.parallel([
         Animated.spring(logoScale, { toValue: 1, tension: 60, friction: 8, useNativeDriver: true }),
         Animated.timing(logoOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
       ]),
-      // Shimmer efekti
+      // Shimmer
       Animated.timing(shimmer, { toValue: 1, duration: 600, useNativeDriver: true }),
-      // Title beliriyor
-      Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.spring(titleTranslateY, { toValue: 0, tension: 80, friction: 10, useNativeDriver: true }),
-      ]),
-      // Biraz bekle
-      Animated.delay(500),
+      // Harfler sırayla beliriyor
+      Animated.parallel(letterSequence),
+      // Bekle
+      Animated.delay(600),
       // Fade out
       Animated.timing(fadeOut, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start(() => onFinish());
@@ -1544,26 +1742,45 @@ function SplashScreen({ onFinish }) {
 
   return (
     <Animated.View style={[splashStyles.container, { opacity: fadeOut }]}>
+      {/* Mor gradient arka plan */}
+      <LinearGradient
+        colors={["#0B0014", "#1A0533", "#0D0020", "#06000F"]}
+        locations={[0, 0.35, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* Logo - tam genişlik, kırpmadan, ortada */}
+      {/* Logo */}
       <Animated.View style={[splashStyles.logoContainer, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}>
         <Image source={require("./assets/logoshot.jpeg")} style={splashStyles.logoImage} resizeMode="contain" />
-        {/* Üst kenar eritme */}
+        {/* Kenar eritme - mor arka plana uyumlu */}
         <LinearGradient
-          colors={["#000000", "transparent"]}
+          colors={["#0B0014", "transparent"]}
           style={splashStyles.edgeFadeTop}
           pointerEvents="none"
         />
-        {/* Alt kenar eritme */}
         <LinearGradient
-          colors={["transparent", "#000000"]}
+          colors={["transparent", "#0D0020"]}
           style={splashStyles.edgeFadeBottom}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={["#0B0014", "transparent"]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 0.15, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={["transparent", "#0B0014"]}
+          start={{ x: 0.85, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
         {/* Shimmer */}
         <Animated.View style={[splashStyles.shimmerOverlay, { transform: [{ translateX: shimmerTranslateX }] }]}>
           <LinearGradient
-            colors={["transparent", "rgba(255,255,255,0.15)", "transparent"]}
+            colors={["transparent", "rgba(168,85,247,0.2)", "transparent"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={StyleSheet.absoluteFill}
@@ -1571,10 +1788,15 @@ function SplashScreen({ onFinish }) {
         </Animated.View>
       </Animated.View>
 
-      {/* Title */}
-      <Animated.Text style={[splashStyles.title, { opacity: titleOpacity, transform: [{ translateY: titleTranslateY }] }]}>
-        Hadi partiye başlayalım
-      </Animated.Text>
+      {/* Mor glow arkada */}
+      <View style={splashStyles.logoGlow} pointerEvents="none" />
+
+      {/* Title - harfler sırayla geliyor */}
+      <View style={splashStyles.titleRow}>
+        {SPLASH_TEXT.split("").map((char, i) => (
+          <AnimatedLetter key={i} char={char} index={i} anims={letterAnims} />
+        ))}
+      </View>
     </Animated.View>
   );
 }
@@ -1585,42 +1807,58 @@ const splashStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 9999,
-    backgroundColor: "#000000",
+    backgroundColor: "#0B0014",
   },
   logoContainer: {
-    width: "100%",
+    width: SCREEN_WIDTH * 0.65,
     aspectRatio: 1,
     position: "relative",
+    borderRadius: SCREEN_WIDTH * 0.65 / 2,
+    overflow: "hidden",
   },
   logoImage: {
     width: "100%",
     height: "100%",
+  },
+  logoGlow: {
+    position: "absolute",
+    top: "25%",
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+    borderRadius: SCREEN_WIDTH / 2,
+    backgroundColor: "#7C3AED",
+    opacity: 0.12,
   },
   edgeFadeTop: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: "20%",
+    height: "25%",
   },
   edgeFadeBottom: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: "20%",
+    height: "25%",
   },
   shimmerOverlay: {
     ...StyleSheet.absoluteFillObject,
     width: SCREEN_WIDTH + 100,
   },
-  title: {
+  titleRow: {
     position: "absolute",
-    bottom: SCREEN_HEIGHT * 0.1,
-    fontSize: 18,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.5)",
-    letterSpacing: 1,
+    bottom: SCREEN_HEIGHT * 0.15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleChar: {
+    fontSize: 19,
+    fontWeight: "700",
+    color: "rgba(192,132,252,0.7)",
+    letterSpacing: 0.5,
   },
 });
 
@@ -1642,10 +1880,10 @@ const styles = StyleSheet.create({
   pageCentered: { justifyContent: "center" },
 
   /* Glow orbs */
-  glowOrb: { position: "absolute", borderRadius: 999 },
-  glowOrb1: { top: -80, right: -60, width: 280, height: 280, backgroundColor: "#EC4899" },
-  glowOrb2: { bottom: -100, left: -80, width: 320, height: 320, backgroundColor: "#8B5CF6" },
-  glowOrb3: { top: "40%", left: "30%", width: 200, height: 200, backgroundColor: "#06B6D4" },
+  nebula: { position: "absolute", borderRadius: 999 },
+  nebula1: { top: -60, right: -80, width: 320, height: 320, backgroundColor: "#7C3AED" },
+  nebula2: { bottom: -80, left: -60, width: 280, height: 280, backgroundColor: "#581C87" },
+  nebula3: { top: "45%", left: -40, width: 200, height: 200, backgroundColor: "#9333EA" },
 
   /* Toast */
   toastContainer: { position: "absolute", top: 0, alignSelf: "center", zIndex: 999, borderRadius: 20, overflow: "hidden", minWidth: "80%" },

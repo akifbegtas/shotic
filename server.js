@@ -5,24 +5,115 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
+/* ── Config ── */
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 const QUESTION_TIMEOUT_MS = Number(process.env.QUESTION_TIMEOUT_MS || 45000);
+const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MS || 1800000); // 30 dk
+const MAX_NAME_LENGTH = 24;
+const MAX_PLAYERS_PER_ROOM = 12;
 
-const io = new Server(server, { cors: { origin: ALLOWED_ORIGIN } });
+const io = new Server(server, {
+  cors: { origin: ALLOWED_ORIGIN },
+  pingTimeout: 20000,
+  pingInterval: 10000,
+});
+
 const rooms = new Map();
 
+/* ── Utility ── */
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function sanitizeName(raw) {
+  return String(raw || '').trim().slice(0, MAX_NAME_LENGTH);
+}
+
+/* ── Questions ── */
 const DARE_BASIC_QUESTIONS = [
   'Telefonundaki son mesajı gruba oku ya da iç.',
   'Karşındaki kişiye iltifat et ya da iç.',
   '10 saniye göz teması kur ya da iç.',
   'Son aradığın kişiyi ara ve selam ver ya da iç.',
-  'En utanç verici anını anlat ya da iç.'
+  'En utanç verici anını anlat ya da iç.',
+  'Grubun en komik taklidi yap ya da iç.',
+  'Telefonundaki en son çektiğin fotoğrafı göster ya da iç.',
+  'En çok hoşlandığın kişinin adını söyle ya da iç.',
+  'Bir dakika boyunca hiç konuşma ya da iç.',
+  'Dans et ya da iç.',
+  'Telefonundaki son DM\'i oku ya da iç.',
+  '30 saniye boyunca tavuk dansı yap ya da iç.',
+  'Sağındaki kişiye sarıl ya da iç.',
+  'En son ağladığın anı anlat ya da iç.',
+  'Telefondaki son aramanı göster ya da iç.',
+  'Gruptaki birine 1-10 arası puan ver ya da iç.',
+  'Bir dakika boyunca göz kırpmadan dur ya da iç.',
+  'En yakın arkadaşına "seni seviyorum" mesajı at ya da iç.',
+  'Instagram\'daki son beğendiğin fotoğrafı göster ya da iç.',
+  'Komik bir fıkra anlat, kimse gülmezse iç.',
+  'Karşındaki kişinin en iyi özelliğini söyle ya da iç.',
+  'Gruptaki en yakışıklı/güzel kişiyi seç ya da iç.',
+  '20 saniye boyunca plank yap ya da iç.',
+  'Son sildiğin mesajı anlat ya da iç.',
+  'Telefon rehberindeki son kişiyi ara ya da iç.',
+  'En utandığın sosyal medya paylaşımını göster ya da iç.',
+  'Bir dakika boyunca aksanla konuş ya da iç.',
+  'Gruptaki birinin taklidi yap, bilinmezse iç.',
+  'En son ne zaman yalan söylediğini itiraf et ya da iç.',
+  'Solundaki kişiye bir meydan okuma ver ya da iç.',
+  'Herkesin önünde 10 şınav çek ya da iç.',
+  'En garip alışkanlığını itiraf et ya da iç.',
+  'Bir şarkının nakaratını söyle ya da iç.',
+  'Annene şimdi "seni çok seviyorum" mesajı at ya da iç.',
+  'Gruptaki birine takma ad tak ya da iç.',
+  'Karşındaki kişiyle selfie çek ya da iç.',
+  'Son YouTube geçmişini göster ya da iç.',
+  'Bir hayvanın sesini çıkar ya da iç.',
+  'Gözlerin kapalı telefona mesaj yaz ve gönder ya da iç.',
+  'En son hangi ünlüyü stalkladığını söyle ya da iç.',
+  'Telefonundaki en eski fotoğrafı göster ya da iç.',
+  'Gruptaki birinin en iyi 3 özelliğini say ya da iç.',
+  'En sevdiğin şarkıyı 10 saniye söyle ya da iç.',
+  'Ayna karşısında en çok yaptığın pozu yap ya da iç.',
+  'Gruptaki birine en içten özür dile ya da iç.',
 ];
 
 const DARE_QUESTIONS = [
-  { text: 'Gruptaki en flörtöz içer', type: 'vote' },
-  { text: "En çok ex'i olan içsin.", type: 'input_number' },
-  { text: 'Seçtiğin kişi içer', type: 'target_select' }
+  { text: 'Gruptaki en flörtöz kişi içer', type: 'vote' },
+  { text: 'En çok ex\'i olan içsin.', type: 'input_number' },
+  { text: 'Seçtiğin kişi içer', type: 'target_select' },
+  { text: 'En çok mesaj atan kişi içer', type: 'vote' },
+  { text: 'Gruptaki en sessiz kişi içer', type: 'vote' },
+  { text: 'En çok yalan söyleyen kişi içer', type: 'vote' },
+  { text: 'En geç uyuyan kişi içer', type: 'vote' },
+  { text: 'En çok stalklayan kişi içer', type: 'vote' },
+  { text: 'Gruptaki en drama kişi içer', type: 'vote' },
+  { text: 'Kaç defa ghostlandın?', type: 'input_number' },
+  { text: 'Kaç tane situationship yaşadın?', type: 'input_number' },
+  { text: 'Seçtiğin kişi 2 yudum içer', type: 'target_select' },
+  { text: 'En romantik kişi içer', type: 'vote' },
+  { text: 'Bugün telefonunu kaç saat kullandın?', type: 'input_number' },
+  { text: 'Seçtiğin kişiye bir cesaret ver', type: 'target_select' },
+  { text: 'En çok partiye giden kişi içer', type: 'vote' },
+  { text: 'Kaç kişiyi ghostladın?', type: 'input_number' },
+  { text: 'Gruptaki en tatlı kişi içer', type: 'vote' },
+  { text: 'Seçtiğin kişi bir shot atar', type: 'target_select' },
+  { text: 'En çok story atan kişi içer', type: 'vote' },
+  { text: 'Kaç tane fake hesabın var?', type: 'input_number' },
+  { text: 'Gruptaki en kıskanç kişi içer', type: 'vote' },
+  { text: 'Seçtiğin kişi dans eder ya da içer', type: 'target_select' },
+  { text: 'En geç kalkan kişi içer', type: 'vote' },
+  { text: 'Kaç tane okunmamış mesajın var?', type: 'input_number' },
+  { text: 'En çok emoji kullanan kişi içer', type: 'vote' },
+  { text: 'Seçtiğin kişiyle 10 saniye göz teması kur', type: 'target_select' },
+  { text: 'Gruptaki en kibar kişi içer', type: 'vote' },
+  { text: 'Son 1 ayda kaç kişiyle flörtleştin?', type: 'input_number' },
+  { text: 'Gruptaki en enerjik kişi içer', type: 'vote' },
 ];
 
 const MODES = {
@@ -30,16 +121,17 @@ const MODES = {
     id: 'dare_basic',
     label: 'Yap Ya da İç',
     type: 'dare_basic',
-    questions: DARE_BASIC_QUESTIONS
+    questions: DARE_BASIC_QUESTIONS,
   },
   challenger: {
     id: 'challenger',
     label: 'Challenger',
     type: 'dare',
-    questions: DARE_QUESTIONS
-  }
+    questions: DARE_QUESTIONS,
+  },
 };
 
+/* ── Room Code ── */
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -53,6 +145,7 @@ function getUniqueRoomCode() {
   return code;
 }
 
+/* ── Room Helpers ── */
 function roomPlayers(room) {
   return Array.from(room.players.values());
 }
@@ -66,12 +159,6 @@ function clearCurrentTurn(room) {
   room.currentTurnPlayerName = null;
 }
 
-/**
- * Turn sistemi artık index yerine lastTurnPlayerId tabanlı.
- * Sıradaki oyuncuyu bulmak için son oynayan oyuncunun
- * player listesindeki pozisyonundan bir sonrakine geçeriz.
- * Oyuncu ayrılsa bile sıra doğru kalır.
- */
 function advanceTurnForNextQuestion(room) {
   const ids = Array.from(room.players.keys());
   if (!ids.length) {
@@ -84,11 +171,8 @@ function advanceTurnForNextQuestion(room) {
   if (room.lastTurnPlayerId) {
     const lastIdx = ids.indexOf(room.lastTurnPlayerId);
     if (lastIdx !== -1) {
-      // Son oynayan hâlâ odadaysa, bir sonraki
       nextIdx = (lastIdx + 1) % ids.length;
     } else {
-      // Son oynayan ayrılmış - ayrılan kişinin "olması gereken" pozisyonundan devam et
-      // turnCursor fallback olarak kullan, ama bounds check yap
       nextIdx = room.turnCursor < ids.length ? room.turnCursor : 0;
     }
   }
@@ -97,7 +181,6 @@ function advanceTurnForNextQuestion(room) {
   room.currentTurnPlayerId = id;
   room.currentTurnPlayerName = room.players.get(id) || null;
   room.lastTurnPlayerId = id;
-  // turnCursor'ı da güncel tut (bir sonraki sıra için)
   room.turnCursor = (nextIdx + 1) % ids.length;
 }
 
@@ -110,21 +193,14 @@ function fixTurnAfterLeave(room, leavingId) {
     return;
   }
 
-  // lastTurnPlayerId ayrılan kişiyse, bir önceki geçerli oyuncuyu bul
-  // böylece advanceTurn bir sonraki doğru kişiye ilerler
   if (room.lastTurnPlayerId === leavingId) {
-    // turnCursor, ayrılmadan önceki "bir sonraki" indexi tutuyordu
-    // Oyuncu ayrıldıktan sonra ids listesi değişti, bounds check yap
     if (room.turnCursor > ids.length) {
       room.turnCursor = 0;
     }
-    // lastTurnPlayerId'yi null yaparak sıranın turnCursor'dan devam etmesini sağla
     room.lastTurnPlayerId = null;
   }
 
-  // Eğer şu anki sırası olan oyuncu ayrıldıysa, sırayı güncelle
   if (room.currentTurnPlayerId === leavingId) {
-    // Bir sonraki oyuncuya geç (advanceTurn çağırmadan, sadece cursor'dan oku)
     const nextIdx = room.turnCursor < ids.length ? room.turnCursor : 0;
     const nextId = ids[nextIdx];
     room.currentTurnPlayerId = nextId;
@@ -160,19 +236,18 @@ function sanitizeRoomForClient(roomCode, room) {
     currentResult: room.currentResult || null,
     answersCount: room.answers.size,
     totalPlayers: room.players.size,
-    questionDeadline: room.questionDeadline || null
+    questionDeadline: room.questionDeadline || null,
   };
 }
 
+/* ── Result Resolvers ── */
 function resolveVoteResult(room) {
   const counts = new Map();
   room.answers.forEach((targetId) => {
     if (!room.players.has(targetId)) return;
     counts.set(targetId, (counts.get(targetId) || 0) + 1);
   });
-  if (!counts.size) {
-    return 'Hiç oy çıkmadı.';
-  }
+  if (!counts.size) return 'Hiç oy çıkmadı.';
 
   let maxCount = 0;
   counts.forEach((count) => { if (count > maxCount) maxCount = count; });
@@ -181,10 +256,9 @@ function resolveVoteResult(room) {
     if (count === maxCount) winners.push(room.players.get(targetId));
   });
 
-  if (winners.length === 1) {
-    return `${winners[0]} içiyor.`;
-  }
-  return `${winners.join(' ve ')} içiyor.`;
+  return winners.length === 1
+    ? `${winners[0]} içiyor.`
+    : `${winners.join(' ve ')} içiyor.`;
 }
 
 function revealVoteNow(roomCode) {
@@ -206,9 +280,7 @@ function resolveInputNumberResult(room) {
     values.push({ socketId, value: n, name: room.players.get(socketId) });
   });
 
-  if (!values.length) {
-    return 'Geçerli sayı girilmedi.';
-  }
+  if (!values.length) return 'Geçerli sayı girilmedi.';
 
   let maxValue = values[0].value;
   for (let i = 1; i < values.length; i += 1) {
@@ -216,10 +288,9 @@ function resolveInputNumberResult(room) {
   }
 
   const winners = values.filter((v) => v.value === maxValue).map((v) => v.name);
-  if (winners.length === 1) {
-    return `${winners[0]} içiyor. (${maxValue})`;
-  }
-  return `${winners.join(' ve ')} içiyor. (${maxValue})`;
+  return winners.length === 1
+    ? `${winners[0]} içiyor. (${maxValue})`
+    : `${winners.join(' ve ')} içiyor. (${maxValue})`;
 }
 
 function revealInputNow(roomCode) {
@@ -238,14 +309,11 @@ function resolveTargetSelectResult(room) {
     if (!room.players.has(targetId)) return;
     targets.push(room.players.get(targetId));
   });
-  if (!targets.length) {
-    return 'Kimse seçilmedi.';
-  }
+  if (!targets.length) return 'Kimse seçilmedi.';
   const unique = Array.from(new Set(targets));
-  if (unique.length === 1) {
-    return `${unique[0]} içiyor.`;
-  }
-  return `${unique.join(' ve ')} içiyor.`;
+  return unique.length === 1
+    ? `${unique[0]} içiyor.`
+    : `${unique.join(' ve ')} içiyor.`;
 }
 
 function revealTargetNow(roomCode) {
@@ -261,6 +329,7 @@ function revealTargetNow(roomCode) {
 function emitRoomState(roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
+  room.lastActivity = Date.now();
   io.to(roomCode).emit('room_state', sanitizeRoomForClient(roomCode, room));
 }
 
@@ -274,7 +343,7 @@ function normalizeQuestionEntry(entry, fallbackType) {
   return {
     text: String(entry.text || 'Soru metni yok.'),
     type: String(entry.type || fallbackType),
-    answer: typeof entry.answer === 'boolean' ? entry.answer : null
+    answer: typeof entry.answer === 'boolean' ? entry.answer : null,
   };
 }
 
@@ -286,8 +355,14 @@ function pickNextQuestion(room) {
     return;
   }
 
+  // Tur bitince yeniden shuffle
+  if (room.questionCursor >= room.questionsSource.length) {
+    room.questionsSource = shuffleArray(room.questionsSource);
+    room.questionCursor = 0;
+  }
+
   const entry = room.questionsSource[room.questionCursor];
-  room.questionCursor = (room.questionCursor + 1) % room.questionsSource.length;
+  room.questionCursor += 1;
   const normalized = normalizeQuestionEntry(entry, room.modeType === 'never' ? 'never_binary' : 'dare_basic');
 
   room.currentQuestion = normalized.text;
@@ -364,7 +439,6 @@ function handlePlayerLeave(socket, roomCode) {
     return;
   }
 
-  // Turn cursor'ı ve sırayı düzelt
   if (room.modeType === 'dare' || room.modeType === 'dare_basic') {
     fixTurnAfterLeave(room, leavingId);
   }
@@ -381,9 +455,54 @@ function handlePlayerLeave(socket, roomCode) {
   emitRoomState(roomCode);
 }
 
+/* ── Room TTL Cleanup ── */
+setInterval(() => {
+  const now = Date.now();
+  rooms.forEach((room, code) => {
+    if (now - room.lastActivity > ROOM_TTL_MS) {
+      clearQuestionTimer(room);
+      // Disconnect kalan socketleri bilgilendir
+      io.to(code).emit('room_error', { message: 'Oda zaman aşımına uğradı.' });
+      rooms.delete(code);
+    }
+  });
+}, 60000); // Her dakika kontrol
+
+/* ── Connection Rate Limiting ── */
+const connectionAttempts = new Map();
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const attempts = connectionAttempts.get(ip) || [];
+  // Son 10 saniyedeki bağlantıları filtrele
+  const recent = attempts.filter((t) => now - t < 10000);
+  connectionAttempts.set(ip, recent);
+  if (recent.length >= 15) return false; // 10 saniyede max 15 bağlantı
+  recent.push(now);
+  return true;
+}
+
+// Rate limit cleanup
+setInterval(() => {
+  const now = Date.now();
+  connectionAttempts.forEach((attempts, ip) => {
+    const recent = attempts.filter((t) => now - t < 10000);
+    if (!recent.length) connectionAttempts.delete(ip);
+    else connectionAttempts.set(ip, recent);
+  });
+}, 30000);
+
+/* ── Socket Events ── */
 io.on('connection', (socket) => {
+  const ip = socket.handshake.address;
+  if (!checkRateLimit(ip)) {
+    socket.emit('room_error', { message: 'Çok fazla bağlantı denemesi. Biraz bekle.' });
+    socket.disconnect(true);
+    return;
+  }
+
   socket.on('create_room', ({ playerName, modeId, modeLabel }) => {
-    const safeName = String(playerName || '').trim();
+    const safeName = sanitizeName(playerName);
     const safeModeId = String(modeId || '').trim();
     if (!safeName) {
       socket.emit('room_error', { message: 'İsim zorunlu.' });
@@ -403,7 +522,7 @@ io.on('connection', (socket) => {
       modeType: mode.type,
       ownerId: socket.id,
       players: new Map([[socket.id, safeName]]),
-      questionsSource: [...mode.questions],
+      questionsSource: shuffleArray(mode.questions),
       questionCursor: 0,
       currentQuestion: null,
       currentQuestionType: null,
@@ -416,7 +535,8 @@ io.on('connection', (socket) => {
       answers: new Map(),
       phase: 'lobby',
       questionTimer: null,
-      questionDeadline: null
+      questionDeadline: null,
+      lastActivity: Date.now(),
     };
 
     rooms.set(roomCode, room);
@@ -429,7 +549,7 @@ io.on('connection', (socket) => {
 
   socket.on('join_room', ({ roomCode, playerName }) => {
     const safeCode = String(roomCode || '').trim().toUpperCase();
-    const safeName = String(playerName || '').trim();
+    const safeName = sanitizeName(playerName);
     if (!safeCode || !safeName) {
       socket.emit('room_error', { message: 'Kod ve isim zorunlu.' });
       return;
@@ -443,6 +563,11 @@ io.on('connection', (socket) => {
 
     if (room.phase !== 'lobby') {
       socket.emit('room_error', { message: 'Oda kodu artık geçersiz.' });
+      return;
+    }
+
+    if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
+      socket.emit('room_error', { message: `Oda dolu (max ${MAX_PLAYERS_PER_ROOM} kişi).` });
       return;
     }
 
@@ -503,7 +628,7 @@ io.on('connection', (socket) => {
     if (room.currentQuestionType !== 'input_number') return;
 
     const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed < 0) return;
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 99999) return;
 
     room.answers.set(socket.id, parsed);
     emitRoomState(roomCode);
@@ -541,14 +666,12 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room) return;
 
-    // Never mode: herkes swipe ile geçirebilir
     if (isNeverMode(room)) {
       if (room.phase !== 'reveal' && room.phase !== 'question') return;
       startQuestion(roomCode);
       return;
     }
 
-    // Dare basic mode: sırası olan veya owner geçirebilir
     if (room.modeType === 'dare_basic') {
       if (room.phase !== 'question') return;
       if (socket.id !== room.currentTurnPlayerId && socket.id !== room.ownerId) return;
@@ -556,14 +679,12 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Challenger (dare) mode: sadece owner
     if (room.ownerId !== socket.id) return;
 
     if (room.phase === 'reveal') {
       startQuestion(roomCode);
       return;
     }
-    // question phase'de sadece interaktif olmayan (basic dare) sorularda atlanabilir
     const interactiveTypes = ['vote', 'input_number', 'target_select'];
     if (room.phase === 'question' && !interactiveTypes.includes(room.currentQuestionType)) {
       startQuestion(roomCode);
@@ -585,11 +706,19 @@ io.on('connection', (socket) => {
   });
 });
 
+/* ── Health Endpoint ── */
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, rooms: rooms.size, questionTimeoutMs: QUESTION_TIMEOUT_MS });
+  res.json({
+    ok: true,
+    rooms: rooms.size,
+    questionTimeoutMs: QUESTION_TIMEOUT_MS,
+    roomTtlMs: ROOM_TTL_MS,
+    uptime: Math.floor(process.uptime()),
+  });
 });
 
+/* ── Start ── */
 const PORT = Number(process.env.PORT || 3003);
 server.listen(PORT, () => {
-  console.log(`Multiplayer server running on http://localhost:${PORT}`);
+  console.log(`Shotic multiplayer server running on http://localhost:${PORT}`);
 });

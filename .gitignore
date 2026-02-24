@@ -1,1 +1,52 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native builds
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# macOS
+.DS_Store
+*.pem
+
+# Env
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# iOS
+ios/Pods/
+ios/build/
+ios/*.xcworkspace
+
+# Android
+android/app/build/
+android/build/
+*.apk
+*.aab
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Backup files
+*.backup.*
