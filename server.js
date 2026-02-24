@@ -11,22 +11,6 @@ const QUESTION_TIMEOUT_MS = Number(process.env.QUESTION_TIMEOUT_MS || 45000);
 const io = new Server(server, { cors: { origin: ALLOWED_ORIGIN } });
 const rooms = new Map();
 
-const NORMAL_NEVER_QUESTIONS = [
-  'Ben daha önce hiç gerçekten sevmediğim birine seni seviyorum dedim.',
-  'Ben daha önce hiç aynı anda iki veya daha fazla kişiyle flörtleştim.',
-  'Ben daha önce hiç sevgilinin telefonunu habersiz olarak karıştırdım.',
-  'Ben daha önce hiç burnumu karıştırıp bir yere sürmedim.',
-  'Ben daha önce hiç toplu taşımada osurmadım.'
-];
-
-const GIRLS_NEVER_QUESTIONS = [
-  'Ben daha önce hiç en yakın arkadaşıma sevgili dedikodusu anlatmadım.',
-  'Ben daha önce hiç hazırlanırken saatlerce kıyafet seçmedim.',
-  'Ben daha önce hiç eski sevgiliyi gizlice stalklamadım.',
-  'Ben daha önce hiç arkadaşımın rujunu izinsiz kullanmadım.',
-  'Ben daha önce hiç kız kıza buluşmada drama çıkarmadım.'
-];
-
 const DARE_BASIC_QUESTIONS = [
   'Telefonundaki son mesajı gruba oku ya da iç.',
   'Karşındaki kişiye iltifat et ya da iç.',
@@ -42,18 +26,6 @@ const DARE_QUESTIONS = [
 ];
 
 const MODES = {
-  never_normal: {
-    id: 'never_normal',
-    label: 'Ben Daha Önce Hiç - Normal',
-    type: 'never',
-    questions: NORMAL_NEVER_QUESTIONS
-  },
-  never_girls: {
-    id: 'never_girls',
-    label: 'Ben Daha Önce Hiç - Kız Kıza',
-    type: 'never',
-    questions: GIRLS_NEVER_QUESTIONS
-  },
   dare_basic: {
     id: 'dare_basic',
     label: 'Yap Ya da İç',
@@ -94,32 +66,70 @@ function clearCurrentTurn(room) {
   room.currentTurnPlayerName = null;
 }
 
-function setCurrentTurnFromCursor(room) {
-  const ids = Array.from(room.players.keys());
-  if (!ids.length) {
-    clearCurrentTurn(room);
-    room.turnCursor = 0;
-    return;
-  }
-  if (room.turnCursor >= ids.length) room.turnCursor = 0;
-  const id = ids[room.turnCursor];
-  room.currentTurnPlayerId = id;
-  room.currentTurnPlayerName = room.players.get(id) || null;
-}
-
+/**
+ * Turn sistemi artık index yerine lastTurnPlayerId tabanlı.
+ * Sıradaki oyuncuyu bulmak için son oynayan oyuncunun
+ * player listesindeki pozisyonundan bir sonrakine geçeriz.
+ * Oyuncu ayrılsa bile sıra doğru kalır.
+ */
 function advanceTurnForNextQuestion(room) {
   const ids = Array.from(room.players.keys());
   if (!ids.length) {
     clearCurrentTurn(room);
+    room.lastTurnPlayerId = null;
+    return;
+  }
+
+  let nextIdx = 0;
+  if (room.lastTurnPlayerId) {
+    const lastIdx = ids.indexOf(room.lastTurnPlayerId);
+    if (lastIdx !== -1) {
+      // Son oynayan hâlâ odadaysa, bir sonraki
+      nextIdx = (lastIdx + 1) % ids.length;
+    } else {
+      // Son oynayan ayrılmış - ayrılan kişinin "olması gereken" pozisyonundan devam et
+      // turnCursor fallback olarak kullan, ama bounds check yap
+      nextIdx = room.turnCursor < ids.length ? room.turnCursor : 0;
+    }
+  }
+
+  const id = ids[nextIdx];
+  room.currentTurnPlayerId = id;
+  room.currentTurnPlayerName = room.players.get(id) || null;
+  room.lastTurnPlayerId = id;
+  // turnCursor'ı da güncel tut (bir sonraki sıra için)
+  room.turnCursor = (nextIdx + 1) % ids.length;
+}
+
+function fixTurnAfterLeave(room, leavingId) {
+  const ids = Array.from(room.players.keys());
+  if (!ids.length) {
+    clearCurrentTurn(room);
+    room.lastTurnPlayerId = null;
     room.turnCursor = 0;
     return;
   }
-  if (room.turnCursor >= ids.length) room.turnCursor = 0;
-  const idx = room.turnCursor;
-  const id = ids[idx];
-  room.currentTurnPlayerId = id;
-  room.currentTurnPlayerName = room.players.get(id) || null;
-  room.turnCursor = (idx + 1) % ids.length;
+
+  // lastTurnPlayerId ayrılan kişiyse, bir önceki geçerli oyuncuyu bul
+  // böylece advanceTurn bir sonraki doğru kişiye ilerler
+  if (room.lastTurnPlayerId === leavingId) {
+    // turnCursor, ayrılmadan önceki "bir sonraki" indexi tutuyordu
+    // Oyuncu ayrıldıktan sonra ids listesi değişti, bounds check yap
+    if (room.turnCursor > ids.length) {
+      room.turnCursor = 0;
+    }
+    // lastTurnPlayerId'yi null yaparak sıranın turnCursor'dan devam etmesini sağla
+    room.lastTurnPlayerId = null;
+  }
+
+  // Eğer şu anki sırası olan oyuncu ayrıldıysa, sırayı güncelle
+  if (room.currentTurnPlayerId === leavingId) {
+    // Bir sonraki oyuncuya geç (advanceTurn çağırmadan, sadece cursor'dan oku)
+    const nextIdx = room.turnCursor < ids.length ? room.turnCursor : 0;
+    const nextId = ids[nextIdx];
+    room.currentTurnPlayerId = nextId;
+    room.currentTurnPlayerName = room.players.get(nextId) || null;
+  }
 }
 
 function isNeverMode(room) {
@@ -338,10 +348,12 @@ function handlePlayerLeave(socket, roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
 
-  room.players.delete(socket.id);
-  room.answers.delete(socket.id);
+  const leavingId = socket.id;
 
-  if (room.ownerId === socket.id) {
+  room.players.delete(leavingId);
+  room.answers.delete(leavingId);
+
+  if (room.ownerId === leavingId) {
     room.ownerId = room.players.keys().next().value || null;
   }
 
@@ -352,8 +364,9 @@ function handlePlayerLeave(socket, roomCode) {
     return;
   }
 
-  if ((room.modeType === 'dare' || room.modeType === 'dare_basic') && room.phase === 'question' && room.currentTurnPlayerId === socket.id) {
-    setCurrentTurnFromCursor(room);
+  // Turn cursor'ı ve sırayı düzelt
+  if (room.modeType === 'dare' || room.modeType === 'dare_basic') {
+    fixTurnAfterLeave(room, leavingId);
   }
 
   if (room.phase === 'question') {
@@ -399,6 +412,7 @@ io.on('connection', (socket) => {
       currentTurnPlayerId: null,
       currentTurnPlayerName: null,
       turnCursor: 0,
+      lastTurnPlayerId: null,
       answers: new Map(),
       phase: 'lobby',
       questionTimer: null,

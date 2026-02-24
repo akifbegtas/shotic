@@ -4,12 +4,10 @@
     "slug": "shot-oyunu-v2",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/shotlogo.png",
+    "icon": "./assets/logoshot.jpeg",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/shotlogo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#05070F"
+      "backgroundColor": "#0a0a0f"
     },
     "assetBundlePatterns": [
       "**/*"
