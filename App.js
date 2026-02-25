@@ -17,15 +17,824 @@ import {
   View,
 } from "react-native";
 
-LogBox.ignoreLogs(["Non-serializable values", "Setting a timer", "AsyncStorage", "Possible Unhandled Promise", "SafeAreaView has been deprecated"]);
+LogBox.ignoreLogs(["Non-serializable values", "Setting a timer", "AsyncStorage", "Possible Unhandled Promise", "SafeAreaView has been deprecated", "React DevTools"]);
 import { Component, useCallback, useEffect, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { io } from "socket.io-client";
-
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+/* ── Safe AsyncStorage wrapper ── */
+let _asyncStorage = null;
+try { _asyncStorage = require("@react-native-async-storage/async-storage").default; } catch (e) {}
+const SafeStorage = {
+  getItem: async (key) => { try { return _asyncStorage ? await _asyncStorage.getItem(key) : null; } catch (e) { return null; } },
+  setItem: async (key, val) => { try { if (_asyncStorage) await _asyncStorage.setItem(key, val); } catch (e) {} },
+};
+
+/* ══════════════ TRANSLATIONS ══════════════ */
+const TRANSLATIONS = {
+  tr: {
+    splash: { subtitle: 'Hadi partiye başlayalım' },
+    error: { title: 'Bir hata oluştu', retry: 'Tekrar Dene' },
+    home: {
+      title: 'Shot Challenge',
+      subtitle: 'Hadi partiye başlayalım!',
+      selectMode: 'Oyun Modu Seç',
+      yourName: 'İSMİN',
+      namePlaceholder: 'Adını gir...',
+      createRoom: 'Oda Oluştur',
+      joinRoom: 'Odaya Katıl',
+      newRoom: 'Yeni Oda Oluştur',
+      roomCode: 'Oda kodu',
+    },
+    modes: {
+      title: 'Oyun Modu',
+      subtitle: 'Nasıl oynamak istersin?',
+      neverTitle: 'Ben Daha Önce Hiç',
+      neverDesc: 'Tek kişilik, kaydır ve geç',
+      dareTitle: 'Yap Ya da İç',
+      dareDesc: 'İsimleri ekle, rastgele çıksın',
+      challengerTitle: 'Challenger',
+      challengerDesc: 'Oylama, sayı yarışı, hedef seçme',
+      selectVersion: 'Mod Seç',
+      selectVersionSub: 'Hangi versiyonu tercih edersin?',
+      normalTitle: 'Normal',
+      normalDesc: 'Herkes için uygun sorular',
+      girlsTitle: 'Kız Kıza',
+      girlsDesc: 'Sadece kızlar arasında',
+      neverNormalLabel: 'Ben Daha Önce Hiç - Normal',
+      neverGirlsLabel: 'Ben Daha Önce Hiç - Kız Kıza',
+      dareLabel: 'Yap Ya da İç',
+      challengerLabel: 'Challenger',
+    },
+    dareSetup: {
+      title: 'Oyuncular',
+      playerName: 'OYUNCU İSMİ',
+      namePlaceholder: 'İsim gir...',
+      players: 'OYUNCULAR',
+      noPlayers: 'Henüz oyuncu eklenmedi',
+      addHint: 'Yukarıdan isim ekleyin',
+      startGame: 'Oyunu Başlat',
+    },
+    lobby: {
+      title: 'Lobi',
+      roomCode: 'ODA KODU',
+      shareHint: 'Arkadaşlarınla paylaş',
+      players: 'OYUNCULAR',
+      startGame: 'Oyunu Başlat',
+      waitingHost: 'Host oyunu başlatacak',
+    },
+    game: {
+      title: 'Oyun',
+      results: 'SONUÇLAR',
+      did: 'Yaptım ✅',
+      didNot: 'Yapmadım ❌',
+      turn: 'SIRA',
+      vote: 'OY VER',
+      me: '(Ben)',
+      submitVote: 'Oyu Gönder',
+      enterNumber: 'SAYINI GİR',
+      submit: 'Gönder',
+      selectOne: 'BİRİNİ SEÇ',
+      nextPlayer: 'Sıradaki oyuncu',
+      result: 'SONUÇ',
+      swipe: 'Kaydır',
+    },
+    toast: {
+      nameRequired: 'Önce ismini yaz.',
+      selectMode: 'Bir oyun modu seç.',
+      enterCode: 'Oda kodunu gir.',
+      emptyName: 'İsim boş olamaz.',
+      duplicateName: 'Bu isim zaten eklendi.',
+      minPlayers: 'En az 2 oyuncu gerekli.',
+      noQuestions: 'Bu mod için henüz soru eklenmedi.',
+      connectionError: 'Sunucuya bağlanılamıyor. Server çalışıyor mu?',
+      disconnected: 'Bağlantı koptu, yeniden bağlanılıyor...',
+      reconnected: 'Bağlantı yeniden kuruldu!',
+      connectionFailed: 'Sunucuya bağlanılamıyor. İnternetini kontrol et.',
+      genericError: 'Bir hata oluştu.',
+    },
+    format: {
+      readyCount: (n) => `${n} kişi hazır`,
+      waitingCount: (n) => `${n} oyuncu bekleniyor`,
+      answerCount: (n, m) => `Cevaplayan: ${n}/${m}`,
+      question: (n) => `Soru ${n}`,
+      selecting: (name) => `${name} seçim yapıyor`,
+      swipeHint: 'Kaydırarak sonraki soruya geç',
+    },
+    questionsNeverNormal: [
+      'Ben daha önce hiç gerçekten sevmediğim birine seni seviyorum dedim.',
+      'Ben daha önce hiç aynı anda iki veya daha fazla kişiyle flörtleştim.',
+      'Ben daha önce hiç sevgilinin telefonunu habersiz olarak karıştırdım.',
+      'Ben daha önce hiç burnumu karıştırıp bir yere sürmedim.',
+      'Ben daha önce hiç toplu taşımada osurmadım.',
+      'Ben daha önce hiç yalan söyleyerek işten/okuldan izin almadım.',
+      'Ben daha önce hiç birinin gözünün içine bakarak yalan söylemedim.',
+      'Ben daha önce hiç utancımdan yerin dibine girmek istemedim.',
+      'Ben daha önce hiç eski sevgilimi sarhoşken aramadım.',
+      'Ben daha önce hiç telefona bakmayıp uyuyordum yalanını söylemedim.',
+      'Ben daha önce hiç biriyle tartışmamak için tamam demedim.',
+      'Ben daha önce hiç trafikte kavga etmedim.',
+      'Ben daha önce hiç sarhoşken kusmadım.',
+      'Ben daha önce hiç ne yaptığımı unutacak kadar içmedim.',
+      'Ben daha önce hiç istemediğim birini ortamı bozmamak için idare etmedim.',
+      'Ben daha önce hiç sadece ilgi almak için birini kabul etmedim.',
+      'Ben daha önce hiç çok sevdiğim birine üzülmemesi için pembe yalan söylemedim.',
+      'Ben daha önce hiç olmaması gereken birine aşık olmadım.',
+      'Ben daha önce hiç göndeme story atmadım.',
+      'Ben daha önce hiç situationship yaşamadım.',
+      'Ben daha önce hiç yakın arkadaşıma gizli ilgi duymadım.',
+      'Ben daha önce hiç birini kıskandırmak için başkasını kullanmadım.',
+      'Ben daha önce hiç birini unutamadığım için ağlamadım.',
+      'Ben daha önce hiç 1 kişiden fazla flört yapmadım.',
+      'Ben daha önce hiç sevgilim varken başkasını özlemedim.',
+      'Ben daha önce hiç sosyal medyadan biriyle tanışmadım.',
+      'Ben daha önce hiç mekanda tanıştığım biriyle konuşmadım.',
+      'Ben daha önce hiç fake hesaptan birine yazmadım.',
+      'Ben daha önce hiç sevgilimin eski sevgilisini stalklamadım.',
+      'Ben daha önce hiç ekran görüntüsünü yanlış kişiye göndermedim.',
+      'Ben daha önce hiç sevgilimin telefonunu karıştırmadım.',
+      'Ben daha önce hiç birini ghostlamadım.',
+      'Ben daha önce hiç aldatıldığımı bildiğim halde ilişkiye devam etmedim.',
+      'Ben daha önce hiç çok büyük bir sır saklamadım.',
+      'Ben daha önce hiç sıkıldığım için tartışma çıkarmadım.',
+      'Ben daha önce hiç durumdan kurtulmak için ağlamadım.',
+      'Ben daha önce hiç bir yerden kaçmak için birine beni ara yazmadım.',
+      'Ben daha önce hiç istemediğim birini öpmedim.',
+      'Ben daha önce hiç siyasi görüşüm hakkında yalan söylemedim.',
+      'Ben daha önce hiç arkadaşımı idare etmek için yalanına destek çıkmadım.',
+      'Ben daha önce hiç gördüğüm birini tanımamış gibi yapmadım.',
+      'Ben daha önce hiç sosyal medyadan biriyle tartışmadım.',
+      'Ben daha önce hiç birine inanmadığım halde destek vermedim.',
+      'Ben daha önce hiç birine takıntılı olmadım.',
+      'Ben daha önce hiç partnerimi kıskandırmak için bir şey yapmadım.',
+      'Ben daha önce hiç kıskandığım halde kıskanmamış gibi davranmadım.',
+      'Ben daha önce hiç exten next denemesi yapmadım.',
+      'Ben daha önce hiç kimsenin storysine alev atmadım.',
+      'Ben daha önce hiç sadece dış görünüşü için birine ilgi duymadım.',
+      'Ben daha önce hiç sevgilimle arkadaşımın dedikodusunu yapmadım.',
+      'Ben daha önce hiç yanlış kişiye mesaj gönderdim.',
+      'Ben daha önce hiç karaoke yapmadım.',
+      'Ben daha önce hiç sahte bir bahane uydurdum.',
+      'Ben daha önce hiç birine aşık olduğumu itiraf edemedim.',
+      'Ben daha önce hiç alkollüyken alışveriş yapmadım.',
+      'Ben daha önce hiç bir arkadaşımın sırrını başkasına söylemedim.',
+      'Ben daha önce hiç bir randevuya geç kalmadım.',
+      'Ben daha önce hiç duşta şarkı söylemedim.',
+      'Ben daha önce hiç birinden intikam almadım.',
+      'Ben daha önce hiç bir filmde ağlamadım.',
+      'Ben daha önce hiç yemek yaparken mutfağı yakacak gibi olmadım.',
+      'Ben daha önce hiç halka açık bir yerde düşmedim.',
+      'Ben daha önce hiç gece geç saatte buzdolabını açıp yemek yemedim.',
+      'Ben daha önce hiç bir partide uyuyakalmadım.',
+      'Ben daha önce hiç birinin hediyesini beğenmemiş gibi yapmadım.',
+      'Ben daha önce hiç spor salonuna yazılıp gitmeyeceğim bir üyelik almadım.',
+      'Ben daha önce hiç bir arkadaşımla aynı kişiden hoşlanmadım.',
+      'Ben daha önce hiç sosyal medyada takipçi kasmadım.',
+      'Ben daha önce hiç birine borç verip geri isteyemedim.',
+      'Ben daha önce hiç yanlışlıkla sesli mesaj gönderdim.',
+      'Ben daha önce hiç canım sıkkınken alışveriş yapmadım.',
+      'Ben daha önce hiç birine gizlice hediye almadım.',
+      'Ben daha önce hiç bir tartışmada haklı olduğum halde özür dilemedim.',
+      'Ben daha önce hiç tanımadığım birinden numara istemedim.',
+      'Ben daha önce hiç bir şarkıyı yanlış sözlerle söylemedim.',
+      'Ben daha önce hiç birinin doğum gününü unutmadım.',
+      'Ben daha önce hiç aşırı derecede klostrofobik olmadım.',
+      'Ben daha önce hiç yabancı birine el sallamadım.',
+    ],
+    questionsNeverGirls: [
+      'Ben daha önce hiç en yakın arkadaşıma sevgili dedikodusu anlatmadım.',
+      'Ben daha önce hiç hazırlanırken saatlerce kıyafet seçmedim.',
+      'Ben daha önce hiç eski sevgiliyi gizlice stalklamadım.',
+      'Ben daha önce hiç arkadaşımın rujunu izinsiz kullanmadım.',
+      'Ben daha önce hiç kız kıza buluşmada drama çıkarmadım.',
+      'Ben daha önce hiç erkek arkadaşıma başka kızı kıskandırmak için bahsetmedim.',
+      'Ben daha önce hiç tuvalette 30 dakika fotoğraf çekmedim.',
+      'Ben daha önce hiç eski sevgilimi sarhoşken aramadım.',
+      'Ben daha önce hiç telefona bakmayıp uyuyordum yalanını söylemedim.',
+      'Ben daha önce hiç sadece ilgi almak için birini kabul etmedim.',
+      'Ben daha önce hiç çok sevdiğim birine üzülmemesi için pembe yalan söylemedim.',
+      'Ben daha önce hiç olmaması gereken birine aşık olmadım.',
+      'Ben daha önce hiç situationship yaşamadım.',
+      'Ben daha önce hiç yakın arkadaşıma gizli ilgi duymadım.',
+      'Ben daha önce hiç birini kıskandırmak için başkasını kullanmadım.',
+      'Ben daha önce hiç birini unutamadığım için ağlamadım.',
+      'Ben daha önce hiç sevgilim varken başkasını özlemedim.',
+      'Ben daha önce hiç fake hesaptan birine yazmadım.',
+      'Ben daha önce hiç sevgilimin eski sevgilisini stalklamadım.',
+      'Ben daha önce hiç ekran görüntüsünü yanlış kişiye göndermedim.',
+      'Ben daha önce hiç birini ghostlamadım.',
+      'Ben daha önce hiç aldatıldığımı bildiğim halde ilişkiye devam etmedim.',
+      'Ben daha önce hiç sıkıldığım için tartışma çıkarmadım.',
+      'Ben daha önce hiç durumdan kurtulmak için ağlamadım.',
+      'Ben daha önce hiç bir yerden kaçmak için birine beni ara yazmadım.',
+      'Ben daha önce hiç istemediğim birini öpmedim.',
+      'Ben daha önce hiç partnerimi kıskandırmak için bir şey yapmadım.',
+      'Ben daha önce hiç kıskandığım halde kıskanmamış gibi davranmadım.',
+      'Ben daha önce hiç exten next denemesi yapmadım.',
+      'Ben daha önce hiç kimsenin storysine alev atmadım.',
+      'Ben daha önce hiç sevgilimle arkadaşımın dedikodusunu yapmadım.',
+      'Ben daha önce hiç göndeme story atmadım.',
+      'Ben daha önce hiç sadece dış görünüşü için birine ilgi duymadım.',
+      'Ben daha önce hiç birine takıntılı olmadım.',
+      'Ben daha önce hiç makyajsız sokağa çıkmadım.',
+      'Ben daha önce hiç dizi izlerken ağlamadım.',
+      'Ben daha önce hiç alışverişte bütçemi aşmadım.',
+      'Ben daha önce hiç bir erkek için arkadaşımla tartışmadım.',
+      'Ben daha önce hiç sosyal medyada birini kıskandırmak için story paylaşmadım.',
+      'Ben daha önce hiç diyet yapıyorum deyip gizlice atıştırmadım.',
+      'Ben daha önce hiç bir erkekle sadece ilgi görmek için konuşmadım.',
+      'Ben daha önce hiç eski erkek arkadaşımın yeni sevgilisini stalklamadım.',
+      'Ben daha önce hiç güzellik ürünlerine aşırı para harcamadım.',
+      'Ben daha önce hiç bir arkadaşıma onun hakkında dedikodu yapıldığını söylemedim.',
+      'Ben daha önce hiç bir erkeğin mesajını bilerek geç cevaplamadım.',
+      'Ben daha önce hiç kız gecesinde çok fazla içmedim.',
+      'Ben daha önce hiç bir erkeğe hint verip onun anlamasını beklemedim.',
+      'Ben daha önce hiç bir partide bilerek dikkat çekecek kıyafet giymedim.',
+    ],
+    questionsDareBasic: [
+      'Telefonundaki son mesajı gruba oku ya da iç.',
+      'Karşındaki kişiye iltifat et ya da iç.',
+      '10 saniye göz teması kur ya da iç.',
+      'Son aradığın kişiyi ara ve selam ver ya da iç.',
+      'En utanç verici anını anlat ya da iç.',
+      'Grubun en komik taklidi yap ya da iç.',
+      'Telefonundaki en son çektiğin fotoğrafı göster ya da iç.',
+      'En çok hoşlandığın kişinin adını söyle ya da iç.',
+      'Bir dakika boyunca hiç konuşma ya da iç.',
+      'Dans et ya da iç.',
+      'Telefonundaki son DM\'i oku ya da iç.',
+      '30 saniye boyunca tavuk dansı yap ya da iç.',
+      'Sağındaki kişiye sarıl ya da iç.',
+      'En son ağladığın anı anlat ya da iç.',
+      'Telefondaki son aramanı göster ya da iç.',
+      'Gruptaki birine 1-10 arası puan ver ya da iç.',
+      'Bir dakika boyunca göz kırpmadan dur ya da iç.',
+      'En yakın arkadaşına "seni seviyorum" mesajı at ya da iç.',
+      'Instagram\'daki son beğendiğin fotoğrafı göster ya da iç.',
+      'Komik bir fıkra anlat, kimse gülmezse iç.',
+      'Karşındaki kişinin en iyi özelliğini söyle ya da iç.',
+      'Gruptaki en yakışıklı/güzel kişiyi seç ya da iç.',
+      '20 saniye boyunca plank yap ya da iç.',
+      'Son sildiğin mesajı anlat ya da iç.',
+      'Telefon rehberindeki son kişiyi ara ya da iç.',
+      'En utandığın sosyal medya paylaşımını göster ya da iç.',
+      'Bir dakika boyunca aksanla konuş ya da iç.',
+      'Gruptaki birinin taklidi yap, bilinmezse iç.',
+      'En son ne zaman yalan söylediğini itiraf et ya da iç.',
+      'Solundaki kişiye bir meydan okuma ver ya da iç.',
+      'Herkesin önünde 10 şınav çek ya da iç.',
+      'En garip alışkanlığını itiraf et ya da iç.',
+      'Bir şarkının nakaratını söyle ya da iç.',
+      'Annene şimdi "seni çok seviyorum" mesajı at ya da iç.',
+      'Gruptaki birine takma ad tak ya da iç.',
+      'Karşındaki kişiyle selfie çek ya da iç.',
+      'Son YouTube geçmişini göster ya da iç.',
+      'Bir hayvanın sesini çıkar ya da iç.',
+      'Gözlerin kapalı telefona mesaj yaz ve gönder ya da iç.',
+      'En son hangi ünlüyü stalkladığını söyle ya da iç.',
+      'Telefonundaki en eski fotoğrafı göster ya da iç.',
+      'Gruptaki birinin en iyi 3 özelliğini say ya da iç.',
+      'En sevdiğin şarkıyı 10 saniye söyle ya da iç.',
+      'Ayna karşısında en çok yaptığın pozu yap ya da iç.',
+    ],
+  },
+  en: {
+    splash: { subtitle: "Let's get the party started" },
+    error: { title: 'An error occurred', retry: 'Try Again' },
+    home: {
+      title: 'Shot Challenge',
+      subtitle: "Let's get the party started!",
+      selectMode: 'Select Game Mode',
+      yourName: 'YOUR NAME',
+      namePlaceholder: 'Enter your name...',
+      createRoom: 'Create Room',
+      joinRoom: 'Join Room',
+      newRoom: 'Create New Room',
+      roomCode: 'Room code',
+    },
+    modes: {
+      title: 'Game Mode',
+      subtitle: 'How do you want to play?',
+      neverTitle: 'Never Have I Ever',
+      neverDesc: 'Solo play, swipe to continue',
+      dareTitle: 'Do or Drink',
+      dareDesc: 'Add names, random picks',
+      challengerTitle: 'Challenger',
+      challengerDesc: 'Voting, number race, target pick',
+      selectVersion: 'Select Mode',
+      selectVersionSub: 'Which version do you prefer?',
+      normalTitle: 'Normal',
+      normalDesc: 'Questions for everyone',
+      girlsTitle: 'Girls Only',
+      girlsDesc: 'Just between the girls',
+      neverNormalLabel: 'Never Have I Ever - Normal',
+      neverGirlsLabel: 'Never Have I Ever - Girls Only',
+      dareLabel: 'Do or Drink',
+      challengerLabel: 'Challenger',
+    },
+    dareSetup: {
+      title: 'Players',
+      playerName: 'PLAYER NAME',
+      namePlaceholder: 'Enter name...',
+      players: 'PLAYERS',
+      noPlayers: 'No players added yet',
+      addHint: 'Add names above',
+      startGame: 'Start Game',
+    },
+    lobby: {
+      title: 'Lobby',
+      roomCode: 'ROOM CODE',
+      shareHint: 'Share with your friends',
+      players: 'PLAYERS',
+      startGame: 'Start Game',
+      waitingHost: 'Waiting for host to start',
+    },
+    game: {
+      title: 'Game',
+      results: 'RESULTS',
+      did: 'I did ✅',
+      didNot: "I didn't ❌",
+      turn: 'TURN',
+      vote: 'VOTE',
+      me: '(Me)',
+      submitVote: 'Submit Vote',
+      enterNumber: 'ENTER YOUR NUMBER',
+      submit: 'Submit',
+      selectOne: 'SELECT ONE',
+      nextPlayer: 'Next player',
+      result: 'RESULT',
+      swipe: 'Swipe',
+    },
+    toast: {
+      nameRequired: 'Enter your name first.',
+      selectMode: 'Select a game mode.',
+      enterCode: 'Enter the room code.',
+      emptyName: 'Name cannot be empty.',
+      duplicateName: 'This name is already added.',
+      minPlayers: 'At least 2 players required.',
+      noQuestions: 'No questions added for this mode yet.',
+      connectionError: 'Cannot connect to server. Is the server running?',
+      disconnected: 'Connection lost, reconnecting...',
+      reconnected: 'Connection restored!',
+      connectionFailed: 'Cannot connect to server. Check your internet.',
+      genericError: 'An error occurred.',
+    },
+    format: {
+      readyCount: (n) => `${n} players ready`,
+      waitingCount: (n) => `${n} players waiting`,
+      answerCount: (n, m) => `Answered: ${n}/${m}`,
+      question: (n) => `Question ${n}`,
+      selecting: (name) => `${name} is choosing`,
+      swipeHint: 'Swipe for next question',
+    },
+    questionsNeverNormal: [
+      "I have never told someone I love you without really meaning it.",
+      "I have never flirted with two or more people at the same time.",
+      "I have never secretly checked my partner's phone.",
+      "I have never picked my nose and wiped it somewhere.",
+      "I have never farted on public transport.",
+      "I have never lied to skip work or school.",
+      "I have never looked someone in the eye while lying.",
+      "I have never wanted the ground to swallow me from embarrassment.",
+      "I have never drunk-called my ex.",
+      "I have never pretended to be asleep to avoid answering my phone.",
+      "I have never said okay just to avoid an argument.",
+      "I have never got into a road rage fight.",
+      "I have never thrown up while drunk.",
+      "I have never been so drunk I forgot what I did.",
+      "I have never tolerated someone I didn't like just to keep the peace.",
+      "I have never accepted someone just for the attention.",
+      "I have never told a white lie to someone I love to protect their feelings.",
+      "I have never fallen for someone I shouldn't have.",
+      "I have never posted a trending story just for views.",
+      "I have never been in a situationship.",
+      "I have never secretly had feelings for a close friend.",
+      "I have never used someone else to make another person jealous.",
+      "I have never cried because I couldn't get over someone.",
+      "I have never flirted with more than one person at a time.",
+      "I have never missed someone else while in a relationship.",
+      "I have never met someone through social media.",
+      "I have never kept talking to someone I met at a bar or club.",
+      "I have never texted someone from a fake account.",
+      "I have never stalked my partner's ex on social media.",
+      "I have never accidentally sent a screenshot to the wrong person.",
+      "I have never snooped through my partner's phone.",
+      "I have never ghosted someone.",
+      "I have never stayed in a relationship knowing I was being cheated on.",
+      "I have never kept a really big secret.",
+      "I have never started a fight out of boredom.",
+      "I have never cried to get out of a situation.",
+      "I have never texted someone 'call me' just to escape somewhere.",
+      "I have never kissed someone I didn't want to kiss.",
+      "I have never lied about my political views.",
+      "I have never backed up a friend's lie to cover for them.",
+      "I have never pretended not to recognize someone I saw.",
+      "I have never argued with someone on social media.",
+      "I have never supported someone I didn't actually believe in.",
+      "I have never been obsessed with someone.",
+      "I have never done something to make my partner jealous.",
+      "I have never acted like I wasn't jealous when I really was.",
+      "I have never tried to rebound right after a breakup.",
+      "I have never sent a flame reaction to anyone's story.",
+      "I have never been attracted to someone just for their looks.",
+      "I have never gossiped about a friend with my partner.",
+      "I have never sent a message to the wrong person.",
+      "I have never done karaoke.",
+      "I have never made up a fake excuse.",
+      "I have never been unable to confess my feelings to someone.",
+      "I have never shopped while drunk.",
+      "I have never told someone else a friend's secret.",
+      "I have never been late to a date.",
+      "I have never sung in the shower.",
+      "I have never taken revenge on someone.",
+      "I have never cried during a movie.",
+      "I have never almost set the kitchen on fire while cooking.",
+      "I have never fallen down in public.",
+      "I have never raided the fridge late at night.",
+      "I have never fallen asleep at a party.",
+      "I have never pretended to like a gift I received.",
+      "I have never signed up for a gym membership I never used.",
+      "I have never liked the same person as my friend.",
+      "I have never tried to farm followers on social media.",
+      "I have never lent money and been too afraid to ask for it back.",
+      "I have never accidentally sent a voice message.",
+      "I have never stress-shopped when I was feeling down.",
+      "I have never secretly bought a gift for someone.",
+      "I have never apologized in an argument even though I was right.",
+      "I have never asked for a stranger's number.",
+      "I have never sung a song with the wrong lyrics.",
+      "I have never forgotten someone's birthday.",
+      "I have never been extremely claustrophobic.",
+      "I have never waved at a stranger.",
+    ],
+    questionsNeverGirls: [
+      "I have never told my best friend all the relationship gossip.",
+      "I have never spent hours picking an outfit before going out.",
+      "I have never secretly stalked an ex.",
+      "I have never used my friend's lipstick without asking.",
+      "I have never caused drama at a girls' night out.",
+      "I have never mentioned another girl to my boyfriend to make him jealous.",
+      "I have never spent 30 minutes taking photos in the bathroom.",
+      "I have never drunk-called my ex.",
+      "I have never pretended to be asleep to avoid answering my phone.",
+      "I have never accepted someone just for the attention.",
+      "I have never told a white lie to someone I love to protect their feelings.",
+      "I have never fallen for someone I shouldn't have.",
+      "I have never been in a situationship.",
+      "I have never secretly had feelings for a close friend.",
+      "I have never used someone else to make another person jealous.",
+      "I have never cried because I couldn't get over someone.",
+      "I have never missed someone else while in a relationship.",
+      "I have never texted someone from a fake account.",
+      "I have never stalked my partner's ex on social media.",
+      "I have never accidentally sent a screenshot to the wrong person.",
+      "I have never ghosted someone.",
+      "I have never stayed in a relationship knowing I was being cheated on.",
+      "I have never started a fight out of boredom.",
+      "I have never cried to get out of a situation.",
+      "I have never texted someone 'call me' just to escape somewhere.",
+      "I have never kissed someone I didn't want to kiss.",
+      "I have never done something to make my partner jealous.",
+      "I have never acted like I wasn't jealous when I really was.",
+      "I have never tried to rebound right after a breakup.",
+      "I have never sent a flame reaction to anyone's story.",
+      "I have never gossiped about a friend with my partner.",
+      "I have never posted a trending story just for views.",
+      "I have never been attracted to someone just for their looks.",
+      "I have never been obsessed with someone.",
+      "I have never gone outside without makeup.",
+      "I have never cried while watching a TV series.",
+      "I have never gone over budget while shopping.",
+      "I have never fought with a friend over a guy.",
+      "I have never posted a story on social media to make someone jealous.",
+      "I have never secretly snacked while claiming to be on a diet.",
+      "I have never talked to a guy just for the attention.",
+      "I have never stalked my ex-boyfriend's new girlfriend.",
+      "I have never spent too much money on beauty products.",
+      "I have never told a friend that people were gossiping about her.",
+      "I have never intentionally replied late to a guy's message.",
+      "I have never had too much to drink at a girls' night.",
+      "I have never dropped hints to a guy and waited for him to figure it out.",
+      "I have never worn an outfit to a party specifically to get attention.",
+    ],
+    questionsDareBasic: [
+      'Read the last message on your phone to the group or drink.',
+      'Give the person across from you a compliment or drink.',
+      'Hold eye contact for 10 seconds or drink.',
+      'Call the last person you called and say hello or drink.',
+      'Tell your most embarrassing moment or drink.',
+      'Do the funniest impression of someone in the group or drink.',
+      'Show the last photo you took on your phone or drink.',
+      'Say the name of the person you like most or drink.',
+      'Stay silent for one full minute or drink.',
+      'Dance or drink.',
+      "Read your last DM out loud or drink.",
+      'Do the chicken dance for 30 seconds or drink.',
+      'Hug the person to your right or drink.',
+      'Tell about the last time you cried or drink.',
+      'Show your last phone call or drink.',
+      'Rate someone in the group from 1-10 or drink.',
+      'Try not to blink for a full minute or drink.',
+      'Text your best friend "I love you" or drink.',
+      "Show the last photo you liked on Instagram or drink.",
+      "Tell a joke — if no one laughs, you drink.",
+      "Say the best quality of the person across from you or drink.",
+      'Pick the most attractive person in the group or drink.',
+      'Hold a plank for 20 seconds or drink.',
+      'Describe the last message you deleted or drink.',
+      'Call the last contact in your phone book or drink.',
+      'Show your most embarrassing social media post or drink.',
+      'Speak in an accent for one minute or drink.',
+      "Impersonate someone in the group — if nobody guesses, you drink.",
+      'Confess the last time you lied or drink.',
+      'Give the person to your left a dare or drink.',
+      'Do 10 push-ups in front of everyone or drink.',
+      'Confess your weirdest habit or drink.',
+      'Sing the chorus of a song or drink.',
+      'Text your mom "I love you so much" right now or drink.',
+      'Give someone in the group a nickname or drink.',
+      'Take a selfie with the person across from you or drink.',
+      'Show your recent YouTube history or drink.',
+      'Make an animal sound or drink.',
+      'Type and send a text with your eyes closed or drink.',
+      'Name the last celebrity you stalked or drink.',
+      'Show the oldest photo on your phone or drink.',
+      "List the top 3 qualities of someone in the group or drink.",
+      'Sing your favorite song for 10 seconds or drink.',
+      'Strike your go-to mirror pose or drink.',
+    ],
+  },
+  de: {
+    splash: { subtitle: "Lass die Party beginnen" },
+    error: { title: 'Ein Fehler ist aufgetreten', retry: 'Erneut versuchen' },
+    home: {
+      title: 'Shot Challenge',
+      subtitle: 'Lass die Party beginnen!',
+      selectMode: 'Spielmodus wählen',
+      yourName: 'DEIN NAME',
+      namePlaceholder: 'Namen eingeben...',
+      createRoom: 'Raum erstellen',
+      joinRoom: 'Raum beitreten',
+      newRoom: 'Neuen Raum erstellen',
+      roomCode: 'Raumcode',
+    },
+    modes: {
+      title: 'Spielmodus',
+      subtitle: 'Wie willst du spielen?',
+      neverTitle: 'Ich hab noch nie',
+      neverDesc: 'Solo spielen, wischen und weiter',
+      dareTitle: 'Mach oder Trink',
+      dareDesc: 'Namen hinzufügen, zufällige Auswahl',
+      challengerTitle: 'Challenger',
+      challengerDesc: 'Abstimmung, Zahlenduell, Ziel wählen',
+      selectVersion: 'Modus wählen',
+      selectVersionSub: 'Welche Version bevorzugst du?',
+      normalTitle: 'Normal',
+      normalDesc: 'Fragen für alle',
+      girlsTitle: 'Mädelsrunde',
+      girlsDesc: 'Nur unter Mädels',
+      neverNormalLabel: 'Ich hab noch nie - Normal',
+      neverGirlsLabel: 'Ich hab noch nie - Mädelsrunde',
+      dareLabel: 'Mach oder Trink',
+      challengerLabel: 'Challenger',
+    },
+    dareSetup: {
+      title: 'Spieler',
+      playerName: 'SPIELERNAME',
+      namePlaceholder: 'Name eingeben...',
+      players: 'SPIELER',
+      noPlayers: 'Noch keine Spieler hinzugefügt',
+      addHint: 'Namen oben hinzufügen',
+      startGame: 'Spiel starten',
+    },
+    lobby: {
+      title: 'Lobby',
+      roomCode: 'RAUMCODE',
+      shareHint: 'Teile es mit deinen Freunden',
+      players: 'SPIELER',
+      startGame: 'Spiel starten',
+      waitingHost: 'Warten auf den Host',
+    },
+    game: {
+      title: 'Spiel',
+      results: 'ERGEBNISSE',
+      did: 'Hab ich ✅',
+      didNot: 'Hab ich nicht ❌',
+      turn: 'DRAN',
+      vote: 'ABSTIMMEN',
+      me: '(Ich)',
+      submitVote: 'Stimme abgeben',
+      enterNumber: 'ZAHL EINGEBEN',
+      submit: 'Absenden',
+      selectOne: 'WÄHLE EINE PERSON',
+      nextPlayer: 'Nächster Spieler',
+      result: 'ERGEBNIS',
+      swipe: 'Wischen',
+    },
+    toast: {
+      nameRequired: 'Gib zuerst deinen Namen ein.',
+      selectMode: 'Wähle einen Spielmodus.',
+      enterCode: 'Gib den Raumcode ein.',
+      emptyName: 'Name darf nicht leer sein.',
+      duplicateName: 'Dieser Name wurde bereits hinzugefügt.',
+      minPlayers: 'Mindestens 2 Spieler erforderlich.',
+      noQuestions: 'Noch keine Fragen für diesen Modus.',
+      connectionError: 'Verbindung zum Server nicht möglich. Läuft der Server?',
+      disconnected: 'Verbindung unterbrochen, wird wiederhergestellt...',
+      reconnected: 'Verbindung wiederhergestellt!',
+      connectionFailed: 'Verbindung zum Server nicht möglich. Überprüfe dein Internet.',
+      genericError: 'Ein Fehler ist aufgetreten.',
+    },
+    format: {
+      readyCount: (n) => `${n} Spieler bereit`,
+      waitingCount: (n) => `${n} Spieler warten`,
+      answerCount: (n, m) => `Geantwortet: ${n}/${m}`,
+      question: (n) => `Frage ${n}`,
+      selecting: (name) => `${name} wählt aus`,
+      swipeHint: 'Wische für die nächste Frage',
+    },
+    questionsNeverNormal: [
+      'Ich hab noch nie jemandem "Ich liebe dich" gesagt, ohne es zu meinen.',
+      'Ich hab noch nie gleichzeitig mit zwei oder mehr Personen geflirtet.',
+      'Ich hab noch nie heimlich das Handy meines Partners durchsucht.',
+      'Ich hab noch nie in der Nase gebohrt und es irgendwo abgewischt.',
+      'Ich hab noch nie in öffentlichen Verkehrsmitteln gefurzt.',
+      'Ich hab noch nie gelogen, um frei von der Arbeit/Schule zu bekommen.',
+      'Ich hab noch nie jemandem direkt in die Augen geschaut und dabei gelogen.',
+      'Ich hab noch nie vor Scham im Boden versinken wollen.',
+      'Ich hab noch nie meinen Ex betrunken angerufen.',
+      'Ich hab noch nie so getan, als würde ich schlafen, um nicht ans Handy zu gehen.',
+      'Ich hab noch nie "okay" gesagt, nur um einen Streit zu vermeiden.',
+      'Ich hab noch nie im Straßenverkehr Streit gehabt.',
+      'Ich hab noch nie betrunken erbrochen.',
+      'Ich hab noch nie so viel getrunken, dass ich vergessen habe, was ich getan habe.',
+      'Ich hab noch nie jemanden ertragen, den ich nicht mochte, nur um die Stimmung nicht zu ruinieren.',
+      'Ich hab noch nie jemanden nur wegen der Aufmerksamkeit akzeptiert.',
+      'Ich hab noch nie eine Notlüge erzählt, um jemanden nicht zu verletzen.',
+      'Ich hab noch nie mich in jemanden verliebt, in den ich mich nicht verlieben sollte.',
+      'Ich hab noch nie eine Story nur für Trends gepostet.',
+      'Ich hab noch nie eine Situationship gehabt.',
+      'Ich hab noch nie heimlich Gefühle für einen engen Freund gehabt.',
+      'Ich hab noch nie jemand anderen benutzt, um eine Person eifersüchtig zu machen.',
+      'Ich hab noch nie geweint, weil ich jemanden nicht vergessen konnte.',
+      'Ich hab noch nie mit mehr als einer Person gleichzeitig geflirtet.',
+      'Ich hab noch nie jemand anderen vermisst, während ich in einer Beziehung war.',
+      'Ich hab noch nie jemanden über Social Media kennengelernt.',
+      'Ich hab noch nie mit jemandem weiter geredet, den ich in einer Bar kennengelernt habe.',
+      'Ich hab noch nie jemandem von einem Fake-Account geschrieben.',
+      'Ich hab noch nie den Ex meines Partners auf Social Media gestalkt.',
+      'Ich hab noch nie versehentlich einen Screenshot an die falsche Person geschickt.',
+      'Ich hab noch nie das Handy meines Partners durchsucht.',
+      'Ich hab noch nie jemanden geghostet.',
+      'Ich hab noch nie eine Beziehung weitergeführt, obwohl ich wusste, dass ich betrogen wurde.',
+      'Ich hab noch nie ein richtig großes Geheimnis bewahrt.',
+      'Ich hab noch nie aus Langeweile einen Streit angefangen.',
+      'Ich hab noch nie geweint, um aus einer Situation rauszukommen.',
+      'Ich hab noch nie jemandem geschrieben "Ruf mich an", nur um irgendwo zu entkommen.',
+      'Ich hab noch nie jemanden geküsst, den ich nicht küssen wollte.',
+      'Ich hab noch nie über meine politische Meinung gelogen.',
+      'Ich hab noch nie die Lüge eines Freundes gedeckt.',
+      'Ich hab noch nie so getan, als würde ich jemanden nicht erkennen.',
+      'Ich hab noch nie mit jemandem in den sozialen Medien gestritten.',
+      'Ich hab noch nie jemanden unterstützt, an den ich nicht wirklich geglaubt habe.',
+      'Ich hab noch nie eine Obsession für jemanden gehabt.',
+      'Ich hab noch nie etwas getan, um meinen Partner eifersüchtig zu machen.',
+      'Ich hab noch nie so getan, als wäre ich nicht eifersüchtig, obwohl ich es war.',
+      'Ich hab noch nie direkt nach einer Trennung einen Rebound versucht.',
+      'Ich hab noch nie auf jemandes Story mit einer Flamme reagiert.',
+      'Ich hab noch nie mich nur wegen des Aussehens zu jemandem hingezogen gefühlt.',
+      'Ich hab noch nie mit meinem Partner über einen Freund gelästert.',
+      'Ich hab noch nie eine Nachricht an die falsche Person geschickt.',
+      'Ich hab noch nie Karaoke gemacht.',
+      'Ich hab noch nie eine falsche Ausrede erfunden.',
+      'Ich hab noch nie es nicht geschafft, jemandem meine Gefühle zu gestehen.',
+      'Ich hab noch nie betrunken online eingekauft.',
+      'Ich hab noch nie das Geheimnis eines Freundes jemand anderem erzählt.',
+      'Ich hab noch nie mich zu einem Date verspätet.',
+      'Ich hab noch nie unter der Dusche gesungen.',
+      'Ich hab noch nie mich an jemandem gerächt.',
+      'Ich hab noch nie bei einem Film geweint.',
+      'Ich hab noch nie beim Kochen fast die Küche abgefackelt.',
+      'Ich hab noch nie in der Öffentlichkeit hingefallen.',
+      'Ich hab noch nie spät nachts den Kühlschrank geplündert.',
+      'Ich hab noch nie auf einer Party eingeschlafen.',
+      'Ich hab noch nie so getan, als würde mir ein Geschenk gefallen.',
+      'Ich hab noch nie eine Fitnessstudio-Mitgliedschaft abgeschlossen, die ich nie genutzt habe.',
+      'Ich hab noch nie dieselbe Person gemocht wie mein Freund.',
+      'Ich hab noch nie versucht, Follower auf Social Media zu sammeln.',
+      'Ich hab noch nie jemandem Geld geliehen und es nicht zurückverlangt.',
+      'Ich hab noch nie versehentlich eine Sprachnachricht geschickt.',
+      'Ich hab noch nie aus Frust eingekauft.',
+      'Ich hab noch nie heimlich jemandem ein Geschenk gekauft.',
+      'Ich hab noch nie mich in einem Streit entschuldigt, obwohl ich recht hatte.',
+      'Ich hab noch nie einen Fremden nach seiner Nummer gefragt.',
+      'Ich hab noch nie ein Lied mit falschen Texten gesungen.',
+      'Ich hab noch nie jemandes Geburtstag vergessen.',
+      'Ich hab noch nie extrem unter Klaustrophobie gelitten.',
+      'Ich hab noch nie einem Fremden zugewinkt.',
+    ],
+    questionsNeverGirls: [
+      'Ich hab noch nie meiner besten Freundin Beziehungsklatsch erzählt.',
+      'Ich hab noch nie stundenlang Outfits ausgesucht, bevor ich fertig war.',
+      'Ich hab noch nie heimlich einen Ex gestalkt.',
+      'Ich hab noch nie den Lippenstift meiner Freundin ohne zu fragen benutzt.',
+      'Ich hab noch nie Drama bei einem Mädelsabend gemacht.',
+      'Ich hab noch nie vor meinem Freund ein anderes Mädchen erwähnt, um ihn eifersüchtig zu machen.',
+      'Ich hab noch nie 30 Minuten auf der Toilette Fotos gemacht.',
+      'Ich hab noch nie meinen Ex betrunken angerufen.',
+      'Ich hab noch nie so getan, als würde ich schlafen, um nicht ans Handy zu gehen.',
+      'Ich hab noch nie jemanden nur wegen der Aufmerksamkeit akzeptiert.',
+      'Ich hab noch nie eine Notlüge erzählt, um jemanden nicht zu verletzen.',
+      'Ich hab noch nie mich in jemanden verliebt, in den ich mich nicht verlieben sollte.',
+      'Ich hab noch nie eine Situationship gehabt.',
+      'Ich hab noch nie heimlich Gefühle für einen engen Freund gehabt.',
+      'Ich hab noch nie jemand anderen benutzt, um eine Person eifersüchtig zu machen.',
+      'Ich hab noch nie geweint, weil ich jemanden nicht vergessen konnte.',
+      'Ich hab noch nie jemand anderen vermisst, während ich in einer Beziehung war.',
+      'Ich hab noch nie jemandem von einem Fake-Account geschrieben.',
+      'Ich hab noch nie den Ex meines Partners auf Social Media gestalkt.',
+      'Ich hab noch nie versehentlich einen Screenshot an die falsche Person geschickt.',
+      'Ich hab noch nie jemanden geghostet.',
+      'Ich hab noch nie eine Beziehung weitergeführt, obwohl ich wusste, dass ich betrogen wurde.',
+      'Ich hab noch nie aus Langeweile einen Streit angefangen.',
+      'Ich hab noch nie geweint, um aus einer Situation rauszukommen.',
+      'Ich hab noch nie jemandem geschrieben "Ruf mich an", nur um irgendwo zu entkommen.',
+      'Ich hab noch nie jemanden geküsst, den ich nicht küssen wollte.',
+      'Ich hab noch nie etwas getan, um meinen Partner eifersüchtig zu machen.',
+      'Ich hab noch nie so getan, als wäre ich nicht eifersüchtig, obwohl ich es war.',
+      'Ich hab noch nie direkt nach einer Trennung einen Rebound versucht.',
+      'Ich hab noch nie auf jemandes Story mit einer Flamme reagiert.',
+      'Ich hab noch nie mit meinem Partner über einen Freund gelästert.',
+      'Ich hab noch nie eine Story nur für Trends gepostet.',
+      'Ich hab noch nie mich nur wegen des Aussehens zu jemandem hingezogen gefühlt.',
+      'Ich hab noch nie eine Obsession für jemanden gehabt.',
+      'Ich hab noch nie das Haus ohne Make-up verlassen.',
+      'Ich hab noch nie beim Serienglotzen geweint.',
+      'Ich hab noch nie beim Shoppen mein Budget überschritten.',
+      'Ich hab noch nie mit einer Freundin wegen eines Typen gestritten.',
+      'Ich hab noch nie eine Story auf Social Media gepostet, um jemanden eifersüchtig zu machen.',
+      'Ich hab noch nie behauptet, Diät zu machen, und heimlich genascht.',
+      'Ich hab noch nie mit einem Typen geredet, nur um Aufmerksamkeit zu bekommen.',
+      'Ich hab noch nie die neue Freundin meines Ex-Freundes gestalkt.',
+      'Ich hab noch nie zu viel Geld für Beauty-Produkte ausgegeben.',
+      'Ich hab noch nie einer Freundin erzählt, dass über sie gelästert wird.',
+      'Ich hab noch nie absichtlich einem Typen spät geantwortet.',
+      'Ich hab noch nie beim Mädelsabend zu viel getrunken.',
+      'Ich hab noch nie einem Typen Andeutungen gemacht und darauf gewartet, dass er es versteht.',
+      'Ich hab noch nie absichtlich ein auffälliges Outfit auf einer Party getragen.',
+    ],
+    questionsDareBasic: [
+      'Lies die letzte Nachricht auf deinem Handy der Gruppe vor oder trink.',
+      'Mach der Person gegenüber ein Kompliment oder trink.',
+      'Halte 10 Sekunden Blickkontakt oder trink.',
+      'Ruf die letzte Person an, die du angerufen hast, und sag Hallo oder trink.',
+      'Erzähl deinen peinlichsten Moment oder trink.',
+      'Mach die lustigste Imitation von jemandem in der Gruppe oder trink.',
+      'Zeig das letzte Foto, das du mit deinem Handy gemacht hast, oder trink.',
+      'Sag den Namen der Person, die du am meisten magst, oder trink.',
+      'Schweige eine ganze Minute oder trink.',
+      'Tanz oder trink.',
+      'Lies deine letzte DM laut vor oder trink.',
+      'Mach 30 Sekunden lang den Ententanz oder trink.',
+      'Umarme die Person rechts neben dir oder trink.',
+      'Erzähl, wann du das letzte Mal geweint hast, oder trink.',
+      'Zeig deinen letzten Anruf auf dem Handy oder trink.',
+      'Bewerte jemanden in der Gruppe von 1-10 oder trink.',
+      'Versuche eine Minute lang nicht zu blinzeln oder trink.',
+      'Schreib deinem besten Freund "Ich liebe dich" oder trink.',
+      'Zeig das letzte Foto, das du auf Instagram geliked hast, oder trink.',
+      'Erzähl einen Witz — wenn keiner lacht, trinkst du.',
+      'Sag die beste Eigenschaft der Person gegenüber oder trink.',
+      'Wähle die attraktivste Person in der Gruppe oder trink.',
+      'Mach 20 Sekunden Plank oder trink.',
+      'Beschreib die letzte Nachricht, die du gelöscht hast, oder trink.',
+      'Ruf den letzten Kontakt in deinem Telefonbuch an oder trink.',
+      'Zeig deinen peinlichsten Social-Media-Post oder trink.',
+      'Sprich eine Minute lang mit Akzent oder trink.',
+      'Imitiere jemanden in der Gruppe — wenn es niemand errät, trinkst du.',
+      'Gestehe, wann du das letzte Mal gelogen hast, oder trink.',
+      'Gib der Person links neben dir eine Aufgabe oder trink.',
+      'Mach 10 Liegestütze vor allen oder trink.',
+      'Gestehe deine seltsamste Angewohnheit oder trink.',
+      'Sing den Refrain eines Liedes oder trink.',
+      'Schreib deiner Mama jetzt "Ich hab dich so lieb" oder trink.',
+      'Gib jemandem in der Gruppe einen Spitznamen oder trink.',
+      'Mach ein Selfie mit der Person gegenüber oder trink.',
+      'Zeig deinen letzten YouTube-Verlauf oder trink.',
+      'Mach ein Tiergeräusch oder trink.',
+      'Schreib mit geschlossenen Augen eine Nachricht und schick sie ab oder trink.',
+      'Sag, welchen Promi du zuletzt gestalkt hast, oder trink.',
+      'Zeig das älteste Foto auf deinem Handy oder trink.',
+      'Zähle die besten 3 Eigenschaften von jemandem in der Gruppe auf oder trink.',
+      'Sing 10 Sekunden lang dein Lieblingslied oder trink.',
+      'Mach deine liebste Pose vor dem Spiegel oder trink.',
+    ],
+  },
+};
 
 const SCREENS = {
   HOME: "home",
@@ -52,184 +861,6 @@ const CARD_FRAMES = {
   challenger: require("./assets/card_party.png"),
 };
 
-const SOLO_QUESTIONS = {
-  never_normal: [
-    'Ben daha önce hiç gerçekten sevmediğim birine seni seviyorum dedim.',
-    'Ben daha önce hiç aynı anda iki veya daha fazla kişiyle flörtleştim.',
-    'Ben daha önce hiç sevgilinin telefonunu habersiz olarak karıştırdım.',
-    'Ben daha önce hiç burnumu karıştırıp bir yere sürmedim.',
-    'Ben daha önce hiç toplu taşımada osurmadım.',
-    'Ben daha önce hiç yalan söyleyerek işten/okuldan izin almadım.',
-    'Ben daha önce hiç birinin gözünün içine bakarak yalan söylemedim.',
-    'Ben daha önce hiç utancımdan yerin dibine girmek istemedim.',
-    'Ben daha önce hiç eski sevgilimi sarhoşken aramadım.',
-    'Ben daha önce hiç telefona bakmayıp uyuyordum yalanını söylemedim.',
-    'Ben daha önce hiç biriyle tartışmamak için tamam demedim.',
-    'Ben daha önce hiç trafikte kavga etmedim.',
-    'Ben daha önce hiç sarhoşken kusmadım.',
-    'Ben daha önce hiç ne yaptığımı unutacak kadar içmedim.',
-    'Ben daha önce hiç istemediğim birini ortamı bozmamak için idare etmedim.',
-    'Ben daha önce hiç sadece ilgi almak için birini kabul etmedim.',
-    'Ben daha önce hiç çok sevdiğim birine üzülmemesi için pembe yalan söylemedim.',
-    'Ben daha önce hiç olmaması gereken birine aşık olmadım.',
-    'Ben daha önce hiç göndeme story atmadım.',
-    'Ben daha önce hiç situationship yaşamadım.',
-    'Ben daha önce hiç yakın arkadaşıma gizli ilgi duymadım.',
-    'Ben daha önce hiç birini kıskandırmak için başkasını kullanmadım.',
-    'Ben daha önce hiç birini unutamadığım için ağlamadım.',
-    'Ben daha önce hiç 1 kişiden fazla flört yapmadım.',
-    'Ben daha önce hiç sevgilim varken başkasını özlemedim.',
-    'Ben daha önce hiç sosyal medyadan biriyle tanışmadım.',
-    'Ben daha önce hiç mekanda tanıştığım biriyle konuşmadım.',
-    'Ben daha önce hiç fake hesaptan birine yazmadım.',
-    'Ben daha önce hiç sevgilimin eski sevgilisini stalklamadım.',
-    'Ben daha önce hiç ekran görüntüsünü yanlış kişiye göndermedim.',
-    'Ben daha önce hiç sevgilimin telefonunu karıştırmadım.',
-    'Ben daha önce hiç birini ghostlamadım.',
-    'Ben daha önce hiç aldatıldığımı bildiğim halde ilişkiye devam etmedim.',
-    'Ben daha önce hiç çok büyük bir sır saklamadım.',
-    'Ben daha önce hiç sıkıldığım için tartışma çıkarmadım.',
-    'Ben daha önce hiç durumdan kurtulmak için ağlamadım.',
-    'Ben daha önce hiç bir yerden kaçmak için birine beni ara yazmadım.',
-    'Ben daha önce hiç istemediğim birini öpmedim.',
-    'Ben daha önce hiç siyasi görüşüm hakkında yalan söylemedim.',
-    'Ben daha önce hiç arkadaşımı idare etmek için yalanına destek çıkmadım.',
-    'Ben daha önce hiç gördüğüm birini tanımamış gibi yapmadım.',
-    'Ben daha önce hiç sosyal medyadan biriyle tartışmadım.',
-    'Ben daha önce hiç birine inanmadığım halde destek vermedim.',
-    'Ben daha önce hiç birine takıntılı olmadım.',
-    'Ben daha önce hiç partnerimi kıskandırmak için bir şey yapmadım.',
-    'Ben daha önce hiç kıskandığım halde kıskanmamış gibi davranmadım.',
-    'Ben daha önce hiç exten next denemesi yapmadım.',
-    'Ben daha önce hiç kimsenin storysine alev atmadım.',
-    'Ben daha önce hiç sadece dış görünüşü için birine ilgi duymadım.',
-    'Ben daha önce hiç sevgilimle arkadaşımın dedikodusunu yapmadım.',
-    'Ben daha önce hiç yanlış kişiye mesaj gönderdim.',
-    'Ben daha önce hiç karaoke yapmadım.',
-    'Ben daha önce hiç sahte bir bahane uydurdum.',
-    'Ben daha önce hiç birine aşık olduğumu itiraf edemedim.',
-    'Ben daha önce hiç alkollüyken alışveriş yapmadım.',
-    'Ben daha önce hiç bir arkadaşımın sırrını başkasına söylemedim.',
-    'Ben daha önce hiç bir randevuya geç kalmadım.',
-    'Ben daha önce hiç duşta şarkı söylemedim.',
-    'Ben daha önce hiç birinden intikam almadım.',
-    'Ben daha önce hiç bir filmde ağlamadım.',
-    'Ben daha önce hiç yemek yaparken mutfağı yakacak gibi olmadım.',
-    'Ben daha önce hiç halka açık bir yerde düşmedim.',
-    'Ben daha önce hiç gece geç saatte buzdolabını açıp yemek yemedim.',
-    'Ben daha önce hiç bir partide uyuyakalmadım.',
-    'Ben daha önce hiç birinin hediyesini beğenmemiş gibi yapmadım.',
-    'Ben daha önce hiç spor salonuna yazılıp gitmeyeceğim bir üyelik almadım.',
-    'Ben daha önce hiç bir arkadaşımla aynı kişiden hoşlanmadım.',
-    'Ben daha önce hiç sosyal medyada takipçi kasmadım.',
-    'Ben daha önce hiç birine borç verip geri isteyemedim.',
-    'Ben daha önce hiç yanlışlıkla sesli mesaj gönderdim.',
-    'Ben daha önce hiç canım sıkkınken alışveriş yapmadım.',
-    'Ben daha önce hiç birine gizlice hediye almadım.',
-    'Ben daha önce hiç bir tartışmada haklı olduğum halde özür dilemedim.',
-    'Ben daha önce hiç tanımadığım birinden numara istemedim.',
-    'Ben daha önce hiç bir şarkıyı yanlış sözlerle söylemedim.',
-    'Ben daha önce hiç birinin doğum gününü unutmadım.',
-    'Ben daha önce hiç aşırı derecede klostrofobik olmadım.',
-    'Ben daha önce hiç yabancı birine el sallamadım.',
-  ],
-  never_girls: [
-    'Ben daha önce hiç en yakın arkadaşıma sevgili dedikodusu anlatmadım.',
-    'Ben daha önce hiç hazırlanırken saatlerce kıyafet seçmedim.',
-    'Ben daha önce hiç eski sevgiliyi gizlice stalklamadım.',
-    'Ben daha önce hiç arkadaşımın rujunu izinsiz kullanmadım.',
-    'Ben daha önce hiç kız kıza buluşmada drama çıkarmadım.',
-    'Ben daha önce hiç erkek arkadaşıma başka kızı kıskandırmak için bahsetmedim.',
-    'Ben daha önce hiç tuvalette 30 dakika fotoğraf çekmedim.',
-    'Ben daha önce hiç eski sevgilimi sarhoşken aramadım.',
-    'Ben daha önce hiç telefona bakmayıp uyuyordum yalanını söylemedim.',
-    'Ben daha önce hiç sadece ilgi almak için birini kabul etmedim.',
-    'Ben daha önce hiç çok sevdiğim birine üzülmemesi için pembe yalan söylemedim.',
-    'Ben daha önce hiç olmaması gereken birine aşık olmadım.',
-    'Ben daha önce hiç situationship yaşamadım.',
-    'Ben daha önce hiç yakın arkadaşıma gizli ilgi duymadım.',
-    'Ben daha önce hiç birini kıskandırmak için başkasını kullanmadım.',
-    'Ben daha önce hiç birini unutamadığım için ağlamadım.',
-    'Ben daha önce hiç sevgilim varken başkasını özlemedim.',
-    'Ben daha önce hiç fake hesaptan birine yazmadım.',
-    'Ben daha önce hiç sevgilimin eski sevgilisini stalklamadım.',
-    'Ben daha önce hiç ekran görüntüsünü yanlış kişiye göndermedim.',
-    'Ben daha önce hiç birini ghostlamadım.',
-    'Ben daha önce hiç aldatıldığımı bildiğim halde ilişkiye devam etmedim.',
-    'Ben daha önce hiç sıkıldığım için tartışma çıkarmadım.',
-    'Ben daha önce hiç durumdan kurtulmak için ağlamadım.',
-    'Ben daha önce hiç bir yerden kaçmak için birine beni ara yazmadım.',
-    'Ben daha önce hiç istemediğim birini öpmedim.',
-    'Ben daha önce hiç partnerimi kıskandırmak için bir şey yapmadım.',
-    'Ben daha önce hiç kıskandığım halde kıskanmamış gibi davranmadım.',
-    'Ben daha önce hiç exten next denemesi yapmadım.',
-    'Ben daha önce hiç kimsenin storysine alev atmadım.',
-    'Ben daha önce hiç sevgilimle arkadaşımın dedikodusunu yapmadım.',
-    'Ben daha önce hiç göndeme story atmadım.',
-    'Ben daha önce hiç sadece dış görünüşü için birine ilgi duymadım.',
-    'Ben daha önce hiç birine takıntılı olmadım.',
-    'Ben daha önce hiç makyajsız sokağa çıkmadım.',
-    'Ben daha önce hiç dizi izlerken ağlamadım.',
-    'Ben daha önce hiç alışverişte bütçemi aşmadım.',
-    'Ben daha önce hiç bir erkek için arkadaşımla tartışmadım.',
-    'Ben daha önce hiç sosyal medyada birini kıskandırmak için story paylaşmadım.',
-    'Ben daha önce hiç diyet yapıyorum deyip gizlice atıştırmadım.',
-    'Ben daha önce hiç bir erkekle sadece ilgi görmek için konuşmadım.',
-    'Ben daha önce hiç eski erkek arkadaşımın yeni sevgilisini stalklamadım.',
-    'Ben daha önce hiç güzellik ürünlerine aşırı para harcamadım.',
-    'Ben daha önce hiç bir arkadaşıma onun hakkında dedikodu yapıldığını söylemedim.',
-    'Ben daha önce hiç bir erkeğin mesajını bilerek geç cevaplamadım.',
-    'Ben daha önce hiç kız gecesinde çok fazla içmedim.',
-    'Ben daha önce hiç bir erkeğe hint verip onun anlamasını beklemedim.',
-    'Ben daha önce hiç bir partide bilerek dikkat çekecek kıyafet giymedim.',
-  ],
-  dare_basic: [
-    'Telefonundaki son mesajı gruba oku ya da iç.',
-    'Karşındaki kişiye iltifat et ya da iç.',
-    '10 saniye göz teması kur ya da iç.',
-    'Son aradığın kişiyi ara ve selam ver ya da iç.',
-    'En utanç verici anını anlat ya da iç.',
-    'Grubun en komik taklidi yap ya da iç.',
-    'Telefonundaki en son çektiğin fotoğrafı göster ya da iç.',
-    'En çok hoşlandığın kişinin adını söyle ya da iç.',
-    'Bir dakika boyunca hiç konuşma ya da iç.',
-    'Dans et ya da iç.',
-    'Telefonundaki son DM\'i oku ya da iç.',
-    '30 saniye boyunca tavuk dansı yap ya da iç.',
-    'Sağındaki kişiye sarıl ya da iç.',
-    'En son ağladığın anı anlat ya da iç.',
-    'Telefondaki son aramanı göster ya da iç.',
-    'Gruptaki birine 1-10 arası puan ver ya da iç.',
-    'Bir dakika boyunca göz kırpmadan dur ya da iç.',
-    'En yakın arkadaşına "seni seviyorum" mesajı at ya da iç.',
-    'Instagram\'daki son beğendiğin fotoğrafı göster ya da iç.',
-    'Komik bir fıkra anlat, kimse gülmezse iç.',
-    'Karşındaki kişinin en iyi özelliğini söyle ya da iç.',
-    'Gruptaki en yakışıklı/güzel kişiyi seç ya da iç.',
-    '20 saniye boyunca plank yap ya da iç.',
-    'Son sildiğin mesajı anlat ya da iç.',
-    'Telefon rehberindeki son kişiyi ara ya da iç.',
-    'En utandığın sosyal medya paylaşımını göster ya da iç.',
-    'Bir dakika boyunca aksanla konuş ya da iç.',
-    'Gruptaki birinin taklidi yap, bilinmezse iç.',
-    'En son ne zaman yalan söylediğini itiraf et ya da iç.',
-    'Solundaki kişiye bir meydan okuma ver ya da iç.',
-    'Herkesin önünde 10 şınav çek ya da iç.',
-    'En garip alışkanlığını itiraf et ya da iç.',
-    'Bir şarkının nakaratını söyle ya da iç.',
-    'Annene şimdi "seni çok seviyorum" mesajı at ya da iç.',
-    'Gruptaki birine takma ad tak ya da iç.',
-    'Karşındaki kişiyle selfie çek ya da iç.',
-    'Son YouTube geçmişini göster ya da iç.',
-    'Bir hayvanın sesini çıkar ya da iç.',
-    'Gözlerin kapalı telefona mesaj yaz ve gönder ya da iç.',
-    'En son hangi ünlüyü stalkladığını söyle ya da iç.',
-    'Telefonundaki en eski fotoğrafı göster ya da iç.',
-    'Gruptaki birinin en iyi 3 özelliğini say ya da iç.',
-    'En sevdiğin şarkıyı 10 saniye söyle ya da iç.',
-    'Ayna karşısında en çok yaptığın pozu yap ya da iç.',
-  ],
-};
 
 const CARD_TEXT_COLORS = {
   never_normal: { main: "#3B1845", counter: "#6B4C78" },
@@ -388,9 +1019,9 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <View style={{ flex: 1, backgroundColor: "#09090B", alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: "#F43F5E", fontSize: 18, fontWeight: "800" }}>Bir hata oluştu</Text>
+          <Text style={{ color: "#F43F5E", fontSize: 18, fontWeight: "800" }}>{TRANSLATIONS[this.props.language || 'tr'].error.title}</Text>
           <Pressable onPress={() => this.setState({ hasError: false })} style={{ marginTop: 16 }}>
-            <Text style={{ color: "#EC4899", fontSize: 16, fontWeight: "700" }}>Tekrar Dene</Text>
+            <Text style={{ color: "#EC4899", fontSize: 16, fontWeight: "700" }}>{TRANSLATIONS[this.props.language || 'tr'].error.retry}</Text>
           </Pressable>
         </View>
       );
@@ -701,6 +1332,76 @@ function PlayerChip({ name, index, onRemove }) {
   );
 }
 
+/* ── Language Toggle Component ── */
+function LanguageToggle({ language, onSelect }) {
+  const flags = { tr: '🇹🇷', en: '🇬🇧', de: '🇩🇪' };
+  const labels = { tr: 'TR', en: 'EN', de: 'DE' };
+  const langs = ['tr', 'en', 'de'];
+  const [open, setOpen] = useState(false);
+  const menuAnim = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const toggleMenu = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 0.85, duration: 80, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, speed: 20, bounciness: 12, useNativeDriver: true }),
+    ]).start();
+    if (open) {
+      Animated.timing(menuAnim, { toValue: 0, duration: 150, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setOpen(false));
+    } else {
+      setOpen(true);
+      Animated.spring(menuAnim, { toValue: 1, speed: 16, bounciness: 8, useNativeDriver: true }).start();
+    }
+  };
+
+  const pickLang = (lang) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onSelect(lang);
+    Animated.timing(menuAnim, { toValue: 0, duration: 150, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setOpen(false));
+  };
+
+  const menuOpacity = menuAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const menuTranslateY = menuAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] });
+  const menuScale = menuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
+
+  return (
+    <View style={{ position: 'absolute', top: 60, right: 20, zIndex: 20, alignItems: 'flex-end' }}>
+      <Pressable onPress={toggleMenu}>
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 6 }}>
+              <Text style={{ fontSize: 18 }}>{flags[language]}</Text>
+              <Text style={{ color: '#A1A1AA', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>{labels[language]}</Text>
+            </View>
+          </BlurView>
+        </Animated.View>
+      </Pressable>
+
+      {open && (
+        <Animated.View style={{ marginTop: 6, opacity: menuOpacity, transform: [{ translateY: menuTranslateY }, { scale: menuScale }] }}>
+          <BlurView intensity={50} tint="dark" style={{ borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+            {langs.map((lang) => (
+              <Pressable
+                key={lang}
+                onPress={() => pickLang(lang)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 8,
+                  backgroundColor: lang === language ? 'rgba(236,72,153,0.15)' : pressed ? 'rgba(255,255,255,0.05)' : 'transparent',
+                })}
+              >
+                <Text style={{ fontSize: 20 }}>{flags[lang]}</Text>
+                <Text style={{ color: lang === language ? '#F472B6' : '#A1A1AA', fontSize: 13, fontWeight: '700', width: 24 }}>{labels[lang]}</Text>
+                {lang === language && <Text style={{ color: '#EC4899', fontSize: 14, fontWeight: '800' }}>✓</Text>}
+              </Pressable>
+            ))}
+          </BlurView>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
 /* ══════════════ MAIN APP ══════════════ */
 function AppContent() {
   const socketRef = useRef(null);
@@ -708,6 +1409,35 @@ function AppContent() {
   const cardAnim = useRef(new Animated.Value(1)).current;
   const setupTabAnim = useRef(new Animated.Value(0)).current;
   const dareResultAnim = useRef(new Animated.Value(0)).current;
+
+  /* ── Language ── */
+  const [language, setLanguage] = useState('tr');
+  const languageRef = useRef('tr');
+
+  const t = useCallback((key) => {
+    const keys = key.split('.');
+    let val = TRANSLATIONS[languageRef.current];
+    for (const k of keys) {
+      if (!val || typeof val !== 'object') return key;
+      val = val[k];
+    }
+    return val !== undefined ? val : key;
+  }, []);
+
+  const changeLanguage = useCallback((lang) => {
+    languageRef.current = lang;
+    setLanguage(lang);
+    SafeStorage.setItem('shotic_language', lang).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    SafeStorage.getItem('shotic_language').then((saved) => {
+      if (saved && TRANSLATIONS[saved]) {
+        languageRef.current = saved;
+        setLanguage(saved);
+      }
+    }).catch(() => {});
+  }, []);
 
   const [screen, setScreenRaw] = useState(SCREENS.HOME);
   const screenRef = useRef(SCREENS.HOME);
@@ -865,21 +1595,21 @@ function AppContent() {
     });
     socket.on("connect_error", (err) => {
       console.log("[socket] connect_error:", err.message);
-      showToast("Sunucuya bağlanılamıyor. Server çalışıyor mu?");
+      showToast(t('toast.connectionError'));
     });
     socket.on("disconnect", (reason) => {
       console.log("[socket] disconnected:", reason);
       if (reason !== "io client disconnect") {
-        showToast("Bağlantı koptu, yeniden bağlanılıyor...");
+        showToast(t('toast.disconnected'));
       }
     });
     socket.io.on("reconnect", () => {
       console.log("[socket] reconnected:", socket.id);
       setMyId(socket.id);
-      showToast("Bağlantı yeniden kuruldu!", "success");
+      showToast(t('toast.reconnected'), "success");
     });
     socket.io.on("reconnect_failed", () => {
-      showToast("Sunucuya bağlanılamıyor. İnternetini kontrol et.");
+      showToast(t('toast.connectionFailed'));
     });
 
     const applyState = (payload) => {
@@ -927,7 +1657,7 @@ function AppContent() {
       }
       runRevealSequence(sequence || []);
     });
-    socket.on("room_error", ({ message }) => showToast(message || "Bir hata oluştu."));
+    socket.on("room_error", ({ message }) => showToast(message || t('toast.genericError')));
 
     return () => socket.disconnect();
   }, []);
@@ -939,19 +1669,20 @@ function AppContent() {
 
   /* ── actions ── */
   const createRoom = () => {
-    if (!playerName.trim()) return showToast("Önce ismini yaz.");
-    if (!selectedMode) return showToast("Bir oyun modu seç.");
+    if (!playerName.trim()) return showToast(t('toast.nameRequired'));
+    if (!selectedMode) return showToast(t('toast.selectMode'));
     socketRef.current?.emit("create_room", {
       playerName: playerName.trim(),
       modeId: selectedMode.id,
       modeLabel: selectedMode.label,
+      language: languageRef.current,
     });
   };
 
   const joinRoom = () => {
-    if (!playerName.trim()) return showToast("Önce ismini yaz.");
-    if (!roomCodeInput.trim()) return showToast("Oda kodunu gir.");
-    socketRef.current?.emit("join_room", { playerName: playerName.trim(), roomCode: roomCodeInput.trim().toUpperCase() });
+    if (!playerName.trim()) return showToast(t('toast.nameRequired'));
+    if (!roomCodeInput.trim()) return showToast(t('toast.enterCode'));
+    socketRef.current?.emit("join_room", { playerName: playerName.trim(), roomCode: roomCodeInput.trim().toUpperCase(), language: languageRef.current });
   };
 
   const leaveRoom = () => {
@@ -995,10 +1726,18 @@ function AppContent() {
     }
   };
 
+  const getSoloQuestions = useCallback((id) => {
+    const lang = TRANSLATIONS[languageRef.current];
+    if (id === 'never_normal') return lang.questionsNeverNormal || [];
+    if (id === 'never_girls') return lang.questionsNeverGirls || [];
+    if (id === 'dare_basic') return lang.questionsDareBasic || [];
+    return [];
+  }, []);
+
   const startSoloGame = (mode) => {
-    const questions = SOLO_QUESTIONS[mode.id] || [];
+    const questions = getSoloQuestions(mode.id);
     if (!questions.length) {
-      showToast("Bu mod için henüz soru eklenmedi.");
+      showToast(t('toast.noQuestions'));
       return;
     }
     const shuffled = shuffleArray(questions);
@@ -1031,11 +1770,11 @@ function AppContent() {
   const addDarePlayer = () => {
     const name = dareNameInput.trim();
     if (!name) {
-      showToast("İsim boş olamaz.");
+      showToast(t('toast.emptyName'));
       return;
     }
     if (darePlayerNames.includes(name)) {
-      showToast("Bu isim zaten eklendi.");
+      showToast(t('toast.duplicateName'));
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -1050,12 +1789,12 @@ function AppContent() {
 
   const startDareGame = () => {
     if (darePlayerNames.length < 2) {
-      showToast("En az 2 oyuncu gerekli.");
+      showToast(t('toast.minPlayers'));
       return;
     }
-    const questions = SOLO_QUESTIONS.dare_basic || [];
+    const questions = getSoloQuestions('dare_basic');
     if (!questions.length) {
-      showToast("Bu mod için henüz soru eklenmedi.");
+      showToast(t('toast.noQuestions'));
       return;
     }
     const shuffled = shuffleArray(questions);
@@ -1104,25 +1843,25 @@ function AppContent() {
 
   /* ── header text ── */
   const headerTitle = (() => {
-    if (screen === SCREENS.HOME) return "Shot Challenge";
-    if (screen === SCREENS.MODE_MAIN) return "Oyun Modu";
-    if (screen === SCREENS.MODE_NEVER_SUB) return "Mod Seç";
-    if (screen === SCREENS.DARE_SETUP) return "Oyuncular";
-    if (screen === SCREENS.LOBBY) return "Lobi";
-    if (screen === SCREENS.GAME) return modeLabel || "Oyun";
-    if (screen === SCREENS.SOLO_GAME) return modeLabel || "Oyun";
+    if (screen === SCREENS.HOME) return t('home.title');
+    if (screen === SCREENS.MODE_MAIN) return t('modes.title');
+    if (screen === SCREENS.MODE_NEVER_SUB) return t('modes.selectVersion');
+    if (screen === SCREENS.DARE_SETUP) return t('dareSetup.title');
+    if (screen === SCREENS.LOBBY) return t('lobby.title');
+    if (screen === SCREENS.GAME) return modeLabel || t('game.title');
+    if (screen === SCREENS.SOLO_GAME) return modeLabel || t('game.title');
     return "";
   })();
 
   const headerSubtitle = (() => {
-    if (screen === SCREENS.HOME) return selectedMode ? selectedMode.label : "Hadi partiye başlayalım!";
-    if (screen === SCREENS.MODE_MAIN) return "Nasıl oynamak istersin?";
-    if (screen === SCREENS.MODE_NEVER_SUB) return "Hangi versiyonu tercih edersin?";
-    if (screen === SCREENS.DARE_SETUP) return `${darePlayerNames.length} kişi hazır`;
-    if (screen === SCREENS.LOBBY) return `${players.length} oyuncu bekleniyor`;
-    if (screen === SCREENS.GAME && phase === "question") return `Cevaplayan: ${answersCount}/${totalPlayers}`;
-    if (screen === SCREENS.GAME && phase === "reveal") return "Sonuçlar";
-    if (screen === SCREENS.SOLO_GAME) return "Kaydırarak sonraki soruya geç";
+    if (screen === SCREENS.HOME) return selectedMode ? selectedMode.label : t('home.subtitle');
+    if (screen === SCREENS.MODE_MAIN) return t('modes.subtitle');
+    if (screen === SCREENS.MODE_NEVER_SUB) return t('modes.selectVersionSub');
+    if (screen === SCREENS.DARE_SETUP) return t('format.readyCount')(darePlayerNames.length);
+    if (screen === SCREENS.LOBBY) return t('format.waitingCount')(players.length);
+    if (screen === SCREENS.GAME && phase === "question") return t('format.answerCount')(answersCount, totalPlayers);
+    if (screen === SCREENS.GAME && phase === "reveal") return t('game.results');
+    if (screen === SCREENS.SOLO_GAME) return t('format.swipeHint');
     return "";
   })();
 
@@ -1139,7 +1878,7 @@ function AppContent() {
             <View style={styles.modeOptionLeft}>
               <Text style={styles.modeOptionIcon}>{selectedMode ? "✓" : "+"}</Text>
               <Text style={[styles.modeOptionText, selectedMode && styles.modeOptionTextActive]}>
-                {selectedMode ? selectedMode.label : "Oyun Modu Seç"}
+                {selectedMode ? selectedMode.label : t('home.selectMode')}
               </Text>
             </View>
             <Text style={{ color: "#71717A", fontSize: 20 }}>›</Text>
@@ -1148,9 +1887,9 @@ function AppContent() {
           {selectedMode && (
             <>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>İSMİN</Text>
+                <Text style={styles.inputLabel}>{t('home.yourName')}</Text>
                 <TextInput
-                  placeholder="Adını gir..."
+                  placeholder={t('home.namePlaceholder')}
                   placeholderTextColor="#52525B"
                   value={playerName}
                   onChangeText={setPlayerName}
@@ -1162,19 +1901,19 @@ function AppContent() {
                 <Pressable style={[styles.segmentButton, setupTab === "create" && styles.segmentButtonActive]} onPress={() => setSetupTab("create")}>
                   {setupTab === "create" ? (
                     <LinearGradient colors={["#EC4899", "#A855F7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.segmentGradient}>
-                      <Text style={styles.segmentTextActive}>Oda Oluştur</Text>
+                      <Text style={styles.segmentTextActive}>{t('home.createRoom')}</Text>
                     </LinearGradient>
                   ) : (
-                    <Text style={styles.segmentText}>Oda Oluştur</Text>
+                    <Text style={styles.segmentText}>{t('home.createRoom')}</Text>
                   )}
                 </Pressable>
                 <Pressable style={[styles.segmentButton, setupTab === "join" && styles.segmentButtonActive]} onPress={() => setSetupTab("join")}>
                   {setupTab === "join" ? (
                     <LinearGradient colors={["#EC4899", "#A855F7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.segmentGradient}>
-                      <Text style={styles.segmentTextActive}>Odaya Katıl</Text>
+                      <Text style={styles.segmentTextActive}>{t('home.joinRoom')}</Text>
                     </LinearGradient>
                   ) : (
-                    <Text style={styles.segmentText}>Odaya Katıl</Text>
+                    <Text style={styles.segmentText}>{t('home.joinRoom')}</Text>
                   )}
                 </Pressable>
               </View>
@@ -1182,18 +1921,18 @@ function AppContent() {
               <View style={styles.panelViewport} onLayout={(e) => setSetupPanelWidth(e.nativeEvent.layout.width)}>
                 <Animated.View style={[styles.panelTrack, { width: (setupPanelWidth || 1) * 2, transform: [{ translateX: setupSlideX }] }]}>
                   <Animated.View style={[styles.panelPage, { width: setupPanelWidth || 1, opacity: setupCreateOpacity }]}>
-                    <GameButton label="Yeni Oda Oluştur" onPress={createRoom} />
+                    <GameButton label={t('home.newRoom')} onPress={createRoom} />
                   </Animated.View>
                   <Animated.View style={[styles.panelPage, { width: setupPanelWidth || 1, opacity: setupJoinOpacity }]}>
                     <View style={styles.stack}>
                       <TextInput
-                        placeholder="Oda kodu"
+                        placeholder={t('home.roomCode')}
                         placeholderTextColor="#52525B"
                         value={roomCodeInput}
                         onChangeText={(v) => setRoomCodeInput(v.toUpperCase())}
                         style={styles.input}
                       />
-                      <GameButton label="Odaya Katıl" onPress={joinRoom} variant="secondary" />
+                      <GameButton label={t('home.joinRoom')} onPress={joinRoom} variant="secondary" />
                     </View>
                   </Animated.View>
                 </Animated.View>
@@ -1212,32 +1951,32 @@ function AppContent() {
             <LinearGradient colors={["rgba(236,72,153,0.15)", "rgba(168,85,247,0.08)"]} style={styles.modeCardGlow} />
             <Text style={styles.modeCardEmoji}>🤝</Text>
             <View style={styles.modeCardTextWrap}>
-              <Text style={styles.modeCardTitle}>Ben Daha Önce Hiç</Text>
-              <Text style={styles.modeCardDesc}>Tek kişilik, kaydır ve geç</Text>
+              <Text style={styles.modeCardTitle}>{t('modes.neverTitle')}</Text>
+              <Text style={styles.modeCardDesc}>{t('modes.neverDesc')}</Text>
             </View>
           </Pressable>
 
           <Pressable
             style={styles.modeCard}
-            onPress={() => selectMode({ id: "dare_basic", label: "Yap Ya da İç" })}
+            onPress={() => selectMode({ id: "dare_basic", label: t('modes.dareLabel') })}
           >
             <LinearGradient colors={["rgba(251,146,60,0.15)", "rgba(236,72,153,0.08)"]} style={styles.modeCardGlow} />
             <Text style={styles.modeCardEmoji}>🍺</Text>
             <View style={styles.modeCardTextWrap}>
-              <Text style={styles.modeCardTitle}>Yap Ya da İç</Text>
-              <Text style={styles.modeCardDesc}>İsimleri ekle, rastgele çıksın</Text>
+              <Text style={styles.modeCardTitle}>{t('modes.dareTitle')}</Text>
+              <Text style={styles.modeCardDesc}>{t('modes.dareDesc')}</Text>
             </View>
           </Pressable>
 
           <Pressable
             style={styles.modeCard}
-            onPress={() => selectMode({ id: "challenger", label: "Challenger" })}
+            onPress={() => selectMode({ id: "challenger", label: t('modes.challengerLabel') })}
           >
             <LinearGradient colors={["rgba(6,182,212,0.15)", "rgba(99,102,241,0.08)"]} style={styles.modeCardGlow} />
             <Text style={styles.modeCardEmoji}>⚡</Text>
             <View style={styles.modeCardTextWrap}>
-              <Text style={styles.modeCardTitle}>Challenger</Text>
-              <Text style={styles.modeCardDesc}>Oylama, sayı yarışı, hedef seçme</Text>
+              <Text style={styles.modeCardTitle}>{t('modes.challengerTitle')}</Text>
+              <Text style={styles.modeCardDesc}>{t('modes.challengerDesc')}</Text>
             </View>
           </Pressable>
         </View>
@@ -1250,10 +1989,10 @@ function AppContent() {
         <View style={styles.stack}>
           {/* Input + Add - always visible at top */}
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>OYUNCU İSMİ</Text>
+            <Text style={styles.inputLabel}>{t('dareSetup.playerName')}</Text>
             <View style={styles.inputRow}>
               <TextInput
-                placeholder="İsim gir..."
+                placeholder={t('dareSetup.namePlaceholder')}
                 placeholderTextColor="#52525B"
                 value={dareNameInput}
                 onChangeText={setDareNameInput}
@@ -1275,7 +2014,7 @@ function AppContent() {
           {/* Player grid - scrollable */}
           <GlassCard style={{ maxHeight: SCREEN_HEIGHT * 0.38 }}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>OYUNCULAR</Text>
+              <Text style={styles.sectionLabel}>{t('dareSetup.players')}</Text>
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>{darePlayerNames.length}</Text>
               </View>
@@ -1284,8 +2023,8 @@ function AppContent() {
             {darePlayerNames.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateIcon}>👥</Text>
-                <Text style={styles.emptyStateText}>Henüz oyuncu eklenmedi</Text>
-                <Text style={styles.emptyStateHint}>Yukarıdan isim ekleyin</Text>
+                <Text style={styles.emptyStateText}>{t('dareSetup.noPlayers')}</Text>
+                <Text style={styles.emptyStateHint}>{t('dareSetup.addHint')}</Text>
               </View>
             ) : (
               <ScrollView
@@ -1307,7 +2046,7 @@ function AppContent() {
 
           {/* Action buttons - always visible at bottom */}
           <GameButton
-            label="Oyunu Başlat"
+            label={t('dareSetup.startGame')}
             onPress={startDareGame}
             disabled={darePlayerNames.length < 2}
           />
@@ -1321,25 +2060,25 @@ function AppContent() {
         <View style={styles.stack}>
           <Pressable
             style={styles.modeCard}
-            onPress={() => selectMode({ id: "never_normal", label: "Ben Daha Önce Hiç - Normal" })}
+            onPress={() => selectMode({ id: "never_normal", label: t('modes.neverNormalLabel') })}
           >
             <LinearGradient colors={["rgba(168,85,247,0.15)", "rgba(99,102,241,0.08)"]} style={styles.modeCardGlow} />
             <Text style={styles.modeCardEmoji}>🎯</Text>
             <View style={styles.modeCardTextWrap}>
-              <Text style={styles.modeCardTitle}>Normal</Text>
-              <Text style={styles.modeCardDesc}>Herkes için uygun sorular</Text>
+              <Text style={styles.modeCardTitle}>{t('modes.normalTitle')}</Text>
+              <Text style={styles.modeCardDesc}>{t('modes.normalDesc')}</Text>
             </View>
           </Pressable>
 
           <Pressable
             style={styles.modeCard}
-            onPress={() => selectMode({ id: "never_girls", label: "Ben Daha Önce Hiç - Kız Kıza" })}
+            onPress={() => selectMode({ id: "never_girls", label: t('modes.neverGirlsLabel') })}
           >
             <LinearGradient colors={["rgba(236,72,153,0.15)", "rgba(244,114,182,0.08)"]} style={styles.modeCardGlow} />
             <Text style={styles.modeCardEmoji}>💕</Text>
             <View style={styles.modeCardTextWrap}>
-              <Text style={styles.modeCardTitle}>Kız Kıza</Text>
-              <Text style={styles.modeCardDesc}>Sadece kızlar arasında</Text>
+              <Text style={styles.modeCardTitle}>{t('modes.girlsTitle')}</Text>
+              <Text style={styles.modeCardDesc}>{t('modes.girlsDesc')}</Text>
             </View>
           </Pressable>
         </View>
@@ -1352,7 +2091,7 @@ function AppContent() {
         <View style={styles.stack}>
           <GlassCard>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>ODA KODU</Text>
+              <Text style={styles.sectionLabel}>{t('lobby.roomCode')}</Text>
               <Pressable style={styles.copyBtn} onPress={copyCode}>
                 <LinearGradient
                   colors={copied ? ["#22C55E", "#16A34A"] : ["#3F3F46", "#27272A"]}
@@ -1363,12 +2102,12 @@ function AppContent() {
               </Pressable>
             </View>
             <Text style={styles.lobbyCode}>{activeRoomCode}</Text>
-            <Text style={styles.lobbyHint}>Arkadaşlarınla paylaş</Text>
+            <Text style={styles.lobbyHint}>{t('lobby.shareHint')}</Text>
           </GlassCard>
 
           <GlassCard>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>OYUNCULAR</Text>
+              <Text style={styles.sectionLabel}>{t('lobby.players')}</Text>
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>{players.length}</Text>
               </View>
@@ -1380,13 +2119,13 @@ function AppContent() {
           </GlassCard>
 
           {isOwner && (
-            <GameButton label="Oyunu Başlat" onPress={startGame} />
+            <GameButton label={t('lobby.startGame')} onPress={startGame} />
           )}
 
           {!isOwner && (
             <View style={styles.waitingBox}>
               <Text style={styles.waitingDots}>...</Text>
-              <Text style={styles.waitingText}>Host oyunu başlatacak</Text>
+              <Text style={styles.waitingText}>{t('lobby.waitingHost')}</Text>
             </View>
           )}
         </View>
@@ -1402,7 +2141,7 @@ function AppContent() {
           {isDareMode && currentDarePlayer && (
             <View style={styles.turnBadge}>
               <LinearGradient colors={["rgba(6,182,212,0.2)", "rgba(99,102,241,0.15)"]} style={styles.turnBadgeGradient}>
-                <Text style={styles.turnBadgeLabel}>SIRA</Text>
+                <Text style={styles.turnBadgeLabel}>{t('game.turn')}</Text>
                 <Text style={styles.turnBadgeName}>{currentDarePlayer}</Text>
               </LinearGradient>
             </View>
@@ -1428,13 +2167,13 @@ function AppContent() {
                 soloModeId && CARD_FRAMES[soloModeId] && styles.questionCounterOnFrame,
                 CARD_TEXT_COLORS[soloModeId] && { color: CARD_TEXT_COLORS[soloModeId].counter }
               ]}>
-                Soru {questionNum}
+                {t('format.question')(questionNum)}
               </Text>
             )}
           </GameCard>
           <View style={styles.swipeHintWrap}>
             <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>←</Text></View>
-            <Text style={styles.swipeHint}>Kaydır</Text>
+            <Text style={styles.swipeHint}>{t('game.swipe')}</Text>
             <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>→</Text></View>
           </View>
         </View>
@@ -1455,11 +2194,11 @@ function AppContent() {
                 onSwipeRight={() => nextQuestion()}
               >
                 <Text style={[styles.questionTextNever, modeId && CARD_FRAMES[modeId] && styles.questionTextOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].main }]}>{question}</Text>
-                {questionNum > 0 && <Text style={[styles.questionCounter, modeId && CARD_FRAMES[modeId] && styles.questionCounterOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].counter }]}>Soru {questionNum}</Text>}
+                {questionNum > 0 && <Text style={[styles.questionCounter, modeId && CARD_FRAMES[modeId] && styles.questionCounterOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].counter }]}>{t('format.question')(questionNum)}</Text>}
               </GameCard>
               <View style={styles.swipeHintWrap}>
                 <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>←</Text></View>
-                <Text style={styles.swipeHint}>Kaydır</Text>
+                <Text style={styles.swipeHint}>{t('game.swipe')}</Text>
                 <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>→</Text></View>
               </View>
             </>
@@ -1467,11 +2206,11 @@ function AppContent() {
 
           {isNever && phase === "reveal" && revealItem && (
             <GlassCard>
-              <Text style={styles.sectionLabel}>SONUÇLAR</Text>
+              <Text style={styles.sectionLabel}>{t('game.results')}</Text>
               <ShimmerLine />
               <View style={styles.revealStage}>
                 <Animated.Text style={[styles.revealText, { transform: [{ translateX: revealX }] }]}>
-                  {revealItem.name}: {revealItem.answer === "did" ? "Yaptım ✅" : "Yapmadım ❌"}
+                  {revealItem.name}: {revealItem.answer === "did" ? t('game.did') : t('game.didNot')}
                 </Animated.Text>
               </View>
             </GlassCard>
@@ -1482,7 +2221,7 @@ function AppContent() {
               {currentTurnPlayerName && (
                 <View style={styles.turnBadge}>
                   <LinearGradient colors={["rgba(6,182,212,0.2)", "rgba(99,102,241,0.15)"]} style={styles.turnBadgeGradient}>
-                    <Text style={styles.turnBadgeLabel}>SIRA</Text>
+                    <Text style={styles.turnBadgeLabel}>{t('game.turn')}</Text>
                     <Text style={styles.turnBadgeName}>{currentTurnPlayerName}</Text>
                   </LinearGradient>
                 </View>
@@ -1496,11 +2235,11 @@ function AppContent() {
                 onSwipeRight={() => nextQuestion()}
               >
                 <Text style={[styles.questionTextDare, modeId && CARD_FRAMES[modeId] && styles.questionTextOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].main }]}>{question}</Text>
-                {questionNum > 0 && <Text style={[styles.questionCounter, modeId && CARD_FRAMES[modeId] && styles.questionCounterOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].counter }]}>Soru {questionNum}</Text>}
+                {questionNum > 0 && <Text style={[styles.questionCounter, modeId && CARD_FRAMES[modeId] && styles.questionCounterOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].counter }]}>{t('format.question')(questionNum)}</Text>}
               </GameCard>
               <View style={styles.swipeHintWrap}>
                 <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>←</Text></View>
-                <Text style={styles.swipeHint}>Kaydır</Text>
+                <Text style={styles.swipeHint}>{t('game.swipe')}</Text>
                 <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>→</Text></View>
               </View>
             </>
@@ -1511,7 +2250,7 @@ function AppContent() {
               {currentTurnPlayerName && (
                 <View style={styles.turnBadge}>
                   <LinearGradient colors={["rgba(6,182,212,0.2)", "rgba(99,102,241,0.15)"]} style={styles.turnBadgeGradient}>
-                    <Text style={styles.turnBadgeLabel}>SIRA</Text>
+                    <Text style={styles.turnBadgeLabel}>{t('game.turn')}</Text>
                     <Text style={styles.turnBadgeName}>{currentTurnPlayerName}</Text>
                   </LinearGradient>
                 </View>
@@ -1519,12 +2258,12 @@ function AppContent() {
 
               <GameCard icon="⚡" modeId={modeId} questionKey={question}>
                 <Text style={[styles.questionTextDare, modeId && CARD_FRAMES[modeId] && styles.questionTextOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].main }]}>{question}</Text>
-                {questionNum > 0 && <Text style={[styles.questionCounter, modeId && CARD_FRAMES[modeId] && styles.questionCounterOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].counter }]}>Soru {questionNum}</Text>}
+                {questionNum > 0 && <Text style={[styles.questionCounter, modeId && CARD_FRAMES[modeId] && styles.questionCounterOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].counter }]}>{t('format.question')(questionNum)}</Text>}
               </GameCard>
 
               {questionType === "vote" && (
                 <GlassCard>
-                  <Text style={styles.sectionLabel}>OY VER</Text>
+                  <Text style={styles.sectionLabel}>{t('game.vote')}</Text>
                   <ShimmerLine />
                   {playerEntries.map((p) => (
                     <Pressable
@@ -1535,18 +2274,18 @@ function AppContent() {
                       <View style={styles.modeOptionLeft}>
                         <Text style={styles.modeOptionIcon}>{selectedVoteTarget === p.id ? "✓" : ""}</Text>
                         <Text style={[styles.modeOptionText, selectedVoteTarget === p.id && styles.modeOptionTextActive]}>
-                          {p.name}{p.id === myId ? " (Ben)" : ""}
+                          {p.name}{p.id === myId ? ` ${t('game.me')}` : ""}
                         </Text>
                       </View>
                     </Pressable>
                   ))}
-                  <GameButton label="Oyu Gönder" onPress={submitVote} disabled={!selectedVoteTarget} />
+                  <GameButton label={t('game.submitVote')} onPress={submitVote} disabled={!selectedVoteTarget} />
                 </GlassCard>
               )}
 
               {questionType === "input_number" && (
                 <GlassCard>
-                  <Text style={styles.sectionLabel}>SAYINI GİR</Text>
+                  <Text style={styles.sectionLabel}>{t('game.enterNumber')}</Text>
                   <ShimmerLine />
                   <TextInput
                     placeholder="0"
@@ -1556,13 +2295,13 @@ function AppContent() {
                     keyboardType="numeric"
                     style={styles.input}
                   />
-                  <GameButton label="Gönder" onPress={submitInput} disabled={!inputNumber} />
+                  <GameButton label={t('game.submit')} onPress={submitInput} disabled={!inputNumber} />
                 </GlassCard>
               )}
 
               {questionType === "target_select" && isMyTurn && (
                 <GlassCard>
-                  <Text style={styles.sectionLabel}>BİRİNİ SEÇ</Text>
+                  <Text style={styles.sectionLabel}>{t('game.selectOne')}</Text>
                   <ShimmerLine />
                   {playerEntries.filter((p) => p.id !== myId).map((p) => (
                     <GameButton key={p.id} label={p.name} onPress={() => submitTarget(p.id)} variant="secondary" />
@@ -1573,7 +2312,7 @@ function AppContent() {
               {questionType === "target_select" && !isMyTurn && (
                 <View style={styles.waitingBox}>
                   <Text style={styles.waitingDots}>...</Text>
-                  <Text style={styles.waitingText}>{currentTurnPlayerName || "Sıradaki oyuncu"} seçim yapıyor</Text>
+                  <Text style={styles.waitingText}>{t('format.selecting')(currentTurnPlayerName || t('game.nextPlayer'))}</Text>
                 </View>
               )}
             </>
@@ -1587,7 +2326,7 @@ function AppContent() {
               <>
                 <Animated.View style={{ transform: [{ scale: dareResultScale }] }}>
                   <GlassCard>
-                    <Text style={styles.questionEyebrow}>SONUÇ</Text>
+                    <Text style={styles.questionEyebrow}>{t('game.result')}</Text>
                     <Text style={styles.revealText}>{answerPart}</Text>
                   </GlassCard>
                 </Animated.View>
@@ -1619,6 +2358,9 @@ function AppContent() {
       <StatusBar style="light" />
       <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
       <PremiumBackground />
+      {screen === SCREENS.HOME && (
+        <LanguageToggle language={language} onSelect={changeLanguage} />
+      )}
       <View style={[styles.page, useCompactCard && styles.pageCentered]}>
 
         {screen !== SCREENS.HOME && (
@@ -1704,15 +2446,22 @@ function AnimatedLetter({ char, index, anims }) {
 }
 
 /* ── Splash Screen ── */
-const SPLASH_TEXT = "Hadi partiye başlayalım";
-
 function SplashScreen({ onFinish }) {
+  const [splashLang, setSplashLang] = useState('tr');
+  const splashText = TRANSLATIONS[splashLang]?.splash?.subtitle || TRANSLATIONS.tr.splash.subtitle;
+
   const logoScale = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const fadeOut = useRef(new Animated.Value(1)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
 
-  const letterAnims = useRef(SPLASH_TEXT.split("").map(() => new Animated.Value(0))).current;
+  useEffect(() => {
+    SafeStorage.getItem('shotic_language').then((saved) => {
+      if (saved && TRANSLATIONS[saved]) setSplashLang(saved);
+    }).catch(() => {});
+  }, []);
+
+  const letterAnims = useRef(splashText.split("").map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     // Harf animasyonları - her harf 40ms arayla geliyor
@@ -1793,7 +2542,7 @@ function SplashScreen({ onFinish }) {
 
       {/* Title - harfler sırayla geliyor */}
       <View style={splashStyles.titleRow}>
-        {SPLASH_TEXT.split("").map((char, i) => (
+        {splashText.split("").map((char, i) => (
           <AnimatedLetter key={i} char={char} index={i} anims={letterAnims} />
         ))}
       </View>
@@ -1864,9 +2613,16 @@ const splashStyles = StyleSheet.create({
 
 export default function App() {
   const [splashDone, setSplashDone] = useState(false);
+  const [appLang, setAppLang] = useState('tr');
+
+  useEffect(() => {
+    SafeStorage.getItem('shotic_language').then((saved) => {
+      if (saved && TRANSLATIONS[saved]) setAppLang(saved);
+    }).catch(() => {});
+  }, []);
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary language={appLang}>
       {!splashDone && <SplashScreen onFinish={() => setSplashDone(true)} />}
       {splashDone && <AppContent />}
     </ErrorBoundary>
