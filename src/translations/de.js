@@ -63,7 +63,7 @@ export const de = {
     selectOne: 'WÄHLE EINE PERSON',
     nextPlayer: 'Nächster Spieler',
     result: 'ERGEBNIS',
-    swipe: 'Wischen',
+    swipe: 'Nächste',
   },
   toast: {
     nameRequired: 'Gib zuerst deinen Namen ein.',

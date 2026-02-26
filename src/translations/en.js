@@ -63,7 +63,7 @@ export const en = {
     selectOne: 'SELECT ONE',
     nextPlayer: 'Next player',
     result: 'RESULT',
-    swipe: 'Swipe',
+    swipe: 'Next',
   },
   toast: {
     nameRequired: 'Enter your name first.',

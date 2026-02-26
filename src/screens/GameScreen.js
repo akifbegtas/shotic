@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import GlassCard from "../components/GlassCard";
 import GameButton from "../components/GameButton";
 import GameCard from "../components/GameCard";
+import DareCard from "../components/DareCard";
 import ShimmerLine from "../components/ShimmerLine";
 import { CARD_FRAMES, CARD_TEXT_COLORS } from "../constants/theme";
 import { styles } from "../styles";
@@ -63,20 +64,11 @@ export default function GameScreen({
             </View>
           )}
 
-          <GameCard
-            icon="🍺"
-            modeId={modeId}
-            questionKey={question}
-            onSwipeLeft={() => nextQuestion()}
-            onSwipeRight={() => nextQuestion()}
-          >
-            <Text style={[styles.questionTextDare, modeId && CARD_FRAMES[modeId] && styles.questionTextOnFrame, CARD_TEXT_COLORS[modeId] && { color: CARD_TEXT_COLORS[modeId].main }]}>{question}</Text>
-          </GameCard>
-          <View style={styles.swipeHintWrap}>
-            <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>←</Text></View>
-            <Text style={styles.swipeHint}>{t('game.swipe')}</Text>
-            <View style={styles.swipeArrow}><Text style={styles.swipeArrowText}>→</Text></View>
-          </View>
+          <DareCard
+            question={question}
+            nextLabel={t('game.swipe')}
+            onNext={() => nextQuestion()}
+          />
         </>
       )}
 

@@ -63,7 +63,7 @@ export const tr = {
     selectOne: 'BİRİNİ SEÇ',
     nextPlayer: 'Sıradaki oyuncu',
     result: 'SONUÇ',
-    swipe: 'Kaydır',
+    swipe: 'Sıradaki',
   },
   toast: {
     nameRequired: 'Önce ismini yaz.',

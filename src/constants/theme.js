@@ -1,7 +1,7 @@
 export const CARD_FRAMES = {
   never_normal: require("../../assets/card_questions.png"),
   never_girls: require("../../assets/card_hearts.png"),
-  dare_basic: require("../../assets/card_party.png"),
+  dare_basic: null,
   challenger: require("../../assets/card_party.png"),
 };
 

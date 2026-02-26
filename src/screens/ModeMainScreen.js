@@ -19,7 +19,7 @@ export default function ModeMainScreen({ t, navigateTo, selectMode }) {
         onPress={() => selectMode({ id: "dare_basic", label: t('modes.dareLabel') })}
       >
         <LinearGradient colors={["rgba(251,146,60,0.15)", "rgba(236,72,153,0.08)"]} style={styles.modeCardGlow} />
-        <Text style={styles.modeCardEmoji}>🍺</Text>
+        <Text style={styles.modeCardEmoji}>🥃</Text>
         <View style={styles.modeCardTextWrap}>
           <Text style={styles.modeCardTitle}>{t('modes.dareTitle')}</Text>
           <Text style={styles.modeCardDesc}>{t('modes.dareDesc')}</Text>

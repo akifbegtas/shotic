@@ -4,7 +4,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { styles } from "../styles";
 
-export default function GameButton({ label, onPress, variant = "primary", disabled = false, icon }) {
+export default function GameButton({ label, onPress, variant = "primary", disabled = false, icon, colors }) {
   const scale = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
@@ -35,12 +35,12 @@ export default function GameButton({ label, onPress, variant = "primary", disabl
     return (
       <Pressable onPress={disabled ? null : onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
         <Animated.View style={[disabled && { opacity: 0.4 }, { transform: [{ scale }] }]}>
-          <Animated.View style={[styles.buttonGlow, { opacity: glowOpacity }]} />
+          <Animated.View style={[styles.buttonGlow, colors && { backgroundColor: colors[0] }, { opacity: glowOpacity }]} />
           <LinearGradient
-            colors={["#EC4899", "#A855F7", "#8B5CF6"]}
+            colors={colors || ["#EC4899", "#A855F7", "#8B5CF6"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.primaryButtonGradient}
+            style={[styles.primaryButtonGradient, colors && { shadowColor: colors[0] }]}
           >
             <Text style={styles.primaryButtonText}>
               {icon ? `${icon}  ` : ""}{label}

@@ -25,7 +25,10 @@ import { TRANSLATIONS } from "./src/translations";
 import { SafeStorage } from "./src/utils/storage";
 import { shuffleArray } from "./src/utils/helpers";
 
+import { ImageBackground } from "react-native";
 import PremiumBackground from "./src/components/PremiumBackground";
+
+const DARE_BG = require("./assets/dare_mode_background.jpg");
 import Toast from "./src/components/Toast";
 import LanguageToggle from "./src/components/LanguageToggle";
 
@@ -573,7 +576,19 @@ function AppContent() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
       <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
-      <PremiumBackground />
+      {(screen === SCREENS.DARE_SETUP || (screen === SCREENS.SOLO_GAME && soloModeId === "dare_basic")) ? (
+        <ImageBackground
+          source={DARE_BG}
+          style={StyleSheet.absoluteFill}
+          imageStyle={{ opacity: 0.45 }}
+          resizeMode="cover"
+          pointerEvents="none"
+        >
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(3,3,8,0.55)" }]} />
+        </ImageBackground>
+      ) : (
+        <PremiumBackground />
+      )}
       {screen === SCREENS.MODE_MAIN && (
         <LanguageToggle language={language} onSelect={changeLanguage} />
       )}

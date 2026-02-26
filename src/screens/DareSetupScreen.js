@@ -28,7 +28,7 @@ export default function DareSetupScreen({
           />
           <Pressable style={styles.addBtn} onPress={addDarePlayer}>
             <LinearGradient
-              colors={["#A855F7", "#EC4899"]}
+              colors={["#0EA5E9", "#06B6D4"]}
               style={styles.addBtnGradient}
             >
               <Text style={styles.addBtnText}>+</Text>
@@ -40,8 +40,8 @@ export default function DareSetupScreen({
       <GlassCard style={{ maxHeight: SCREEN_HEIGHT * 0.38 }}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionLabel}>{t('dareSetup.players')}</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{darePlayerNames.length}</Text>
+          <View style={[styles.countBadge, { backgroundColor: "rgba(6,182,212,0.15)", borderColor: "rgba(6,182,212,0.3)" }]}>
+            <Text style={[styles.countBadgeText, { color: "#06B6D4" }]}>{darePlayerNames.length}</Text>
           </View>
         </View>
         <ShimmerLine />
@@ -73,6 +73,7 @@ export default function DareSetupScreen({
         label={t('dareSetup.startGame')}
         onPress={startDareGame}
         disabled={darePlayerNames.length < 2}
+        colors={["#0EA5E9", "#06B6D4", "#0891B2"]}
       />
     </View>
   );
