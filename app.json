@@ -21,6 +21,9 @@
         "foregroundImage": "./assets/shotlogo.png",
         "backgroundColor": "#05070F"
       }
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

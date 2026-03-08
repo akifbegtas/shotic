@@ -1,6 +1,7 @@
 export const tr = {
   splash: { subtitle: 'Hadi partiye başlayalım' },
   error: { title: 'Bir hata oluştu', retry: 'Tekrar Dene' },
+  settings: { title: 'Ayarlar', language: 'Dil' },
   home: {
     title: 'Shot Challenge',
     subtitle: 'Hadi partiye başlayalım!',

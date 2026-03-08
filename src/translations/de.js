@@ -1,6 +1,7 @@
 export const de = {
   splash: { subtitle: "Lass die Party beginnen" },
   error: { title: 'Ein Fehler ist aufgetreten', retry: 'Erneut versuchen' },
+  settings: { title: 'Einstellungen', language: 'Sprache' },
   home: {
     title: 'Shot Challenge',
     subtitle: 'Lass die Party beginnen!',

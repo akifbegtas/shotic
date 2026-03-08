@@ -14,6 +14,7 @@ import {
 LogBox.ignoreLogs(["Non-serializable values", "Setting a timer", "AsyncStorage", "Possible Unhandled Promise", "SafeAreaView has been deprecated", "React DevTools"]);
 import { Component, useCallback, useEffect, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
+import * as Font from "expo-font";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -31,6 +32,7 @@ import PremiumBackground from "./src/components/PremiumBackground";
 const DARE_BG = require("./assets/dare_mode_background.jpg");
 import Toast from "./src/components/Toast";
 import LanguageToggle from "./src/components/LanguageToggle";
+import SettingsModal from "./src/components/SettingsModal";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import ModeMainScreen from "./src/screens/ModeMainScreen";
@@ -66,6 +68,13 @@ class ErrorBoundary extends Component {
 
 /* ══════════════ MAIN APP ══════════════ */
 function AppContent() {
+  const [fontsLoaded, setFontsLoaded] = useState(false);
+  useEffect(() => {
+    Font.loadAsync({ 'NotoRashiHebrew': require('./assets/fonts/NotoRashiHebrew-Variable.ttf') })
+      .then(() => setFontsLoaded(true))
+      .catch(() => setFontsLoaded(true));
+  }, []);
+
   const socketRef = useRef(null);
   const revealX = useRef(new Animated.Value(400)).current;
   const cardAnim = useRef(new Animated.Value(1)).current;
@@ -102,6 +111,7 @@ function AppContent() {
   }, []);
 
   const [screen, setScreenRaw] = useState(SCREENS.MODE_MAIN);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const screenRef = useRef(SCREENS.MODE_MAIN);
   const setScreen = (s) => { screenRef.current = s; setScreenRaw(s); };
   const isNavigating = useRef(false);
@@ -589,42 +599,48 @@ function AppContent() {
       ) : (
         <PremiumBackground />
       )}
-      {screen === SCREENS.MODE_MAIN && (
-        <LanguageToggle language={language} onSelect={changeLanguage} />
+      {/* Top bar: back button + settings */}
+      {screen !== SCREENS.MODE_MAIN && (
+        <Pressable
+          style={styles.backButton}
+          onPress={() => {
+            if (screen === SCREENS.SOLO_GAME) {
+              if (soloModeId === "dare_basic") exitDareGame();
+              else exitSoloGame();
+            } else if (screen === SCREENS.DARE_SETUP) {
+              navigateTo(SCREENS.MODE_MAIN);
+            } else if (screen === SCREENS.HOME) {
+              navigateTo(SCREENS.MODE_MAIN);
+            } else if (screen === SCREENS.MODE_NEVER_SUB) {
+              navigateTo(SCREENS.MODE_MAIN);
+            } else {
+              leaveRoom();
+            }
+          }}
+        >
+          <BlurView intensity={30} tint="dark" style={styles.backButtonBlur}>
+            <Text style={styles.backIcon}>‹</Text>
+          </BlurView>
+        </Pressable>
       )}
+
+      {screen !== SCREENS.GAME && screen !== SCREENS.SOLO_GAME && (
+        <Pressable style={styles.settingsButton} onPress={() => setSettingsOpen(true)}>
+          <BlurView intensity={30} tint="dark" style={styles.backButtonBlur}>
+            <Text style={styles.settingsIcon}>⚙</Text>
+          </BlurView>
+        </Pressable>
+      )}
+
+      {(screen === SCREENS.GAME || screen === SCREENS.SOLO_GAME) && modeLabel && (
+        <View style={styles.modeTag}>
+          <BlurView intensity={20} tint="dark" style={styles.modeTagBlur}>
+            <Text style={styles.modeTagText}>{modeLabel}</Text>
+          </BlurView>
+        </View>
+      )}
+
       <View style={[styles.page, useCompactCard && styles.pageCentered]}>
-
-        {screen !== SCREENS.MODE_MAIN && screen !== SCREENS.HOME && (
-          <Pressable
-            style={styles.backButton}
-            onPress={() => {
-              if (screen === SCREENS.SOLO_GAME) {
-                if (soloModeId === "dare_basic") exitDareGame();
-                else exitSoloGame();
-              } else if (screen === SCREENS.DARE_SETUP) {
-                navigateTo(SCREENS.MODE_MAIN);
-              } else if (screen === SCREENS.HOME) {
-                navigateTo(SCREENS.MODE_MAIN);
-              } else if (screen === SCREENS.MODE_NEVER_SUB) {
-                navigateTo(SCREENS.MODE_MAIN);
-              } else {
-                leaveRoom();
-              }
-            }}
-          >
-            <BlurView intensity={30} tint="dark" style={styles.backButtonBlur}>
-              <Text style={styles.backIcon}>‹</Text>
-            </BlurView>
-          </Pressable>
-        )}
-
-        {(screen === SCREENS.GAME || screen === SCREENS.SOLO_GAME) && modeLabel && (
-          <View style={styles.modeTag}>
-            <BlurView intensity={20} tint="dark" style={styles.modeTagBlur}>
-              <Text style={styles.modeTagText}>{modeLabel}</Text>
-            </BlurView>
-          </View>
-        )}
 
         {screen !== SCREENS.GAME && screen !== SCREENS.SOLO_GAME && (
           <View style={[styles.header, screen !== SCREENS.MODE_MAIN && styles.headerWithBack]}>
@@ -657,6 +673,13 @@ function AppContent() {
           </Animated.View>
         )}
       </View>
+      <SettingsModal
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        language={language}
+        onSelectLanguage={changeLanguage}
+        t={t}
+      />
     </SafeAreaView>
   );
 }

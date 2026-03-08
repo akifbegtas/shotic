@@ -115,15 +115,26 @@ export default function DareCard({ question, nextLabel, onNext, playerName, turn
               {question.replace(/\s*ya da iç\.?$/i, '').replace(/\s*or drink\.?$/i, '').replace(/\s*oder trink\.?$/i, '')}
             </Text>
 
-            {/* YA DA divider */}
-            <View style={s.dividerWrap}>
-              <View style={s.dividerLine} />
-              <Text style={s.dividerText}>YA DA</Text>
-              <View style={s.dividerLine} />
+            {/* YA DA badge with side lines */}
+            <View style={s.orRow}>
+              <View style={s.orSideLine} />
+              <View style={s.orBadge}>
+                <LinearGradient
+                  colors={["rgba(55, 48, 120, 0.85)", "rgba(40, 35, 90, 0.9)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={s.orBadgeGradient}
+                >
+                  <Text style={s.orBadgeText}>YA DA</Text>
+                </LinearGradient>
+              </View>
+              <View style={s.orSideLine} />
             </View>
 
-            {/* İÇ! */}
-            <Text style={s.drinkLabel}>İÇ!</Text>
+            {/* İÇ! with pulse */}
+            <Animated.Text style={[s.drinkLabel, { opacity: drinkGlow, transform: [{ scale: drinkScale }] }]}>
+              İÇ!
+            </Animated.Text>
           </View>
 
           {/* Bottom spacer */}
@@ -208,44 +219,64 @@ const s = StyleSheet.create({
     gap: 10,
   },
   questionText: {
-    color: "#F0EEFF",
+    color: "#A8D4F0",
     fontSize: 24,
-    fontWeight: "900",
+    fontFamily: "NotoRashiHebrew",
+    fontWeight: "400",
     textAlign: "center",
-    lineHeight: 34,
-    letterSpacing: 0.3,
-    textShadowColor: "rgba(0,0,0,0.8)",
+    lineHeight: 36,
+    letterSpacing: 0.2,
+    textShadowColor: "rgba(0,0,0,0.7)",
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 12,
+    textShadowRadius: 10,
   },
-  dividerWrap: {
+  orRow: {
     flexDirection: "row",
     alignItems: "center",
-    width: "80%",
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 18,
+    marginBottom: 6,
+    width: "100%",
+    paddingHorizontal: 10,
   },
-  dividerLine: {
+  orSideLine: {
     flex: 1,
-    height: 1.5,
-    backgroundColor: "rgba(160, 170, 255, 0.35)",
+    height: 1,
+    backgroundColor: "rgba(180, 175, 255, 0.25)",
   },
-  dividerText: {
+  orBadge: {
+    marginHorizontal: 14,
+    borderRadius: 24,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    borderColor: "rgba(120, 110, 220, 0.4)",
+    shadowColor: "#6C63FF",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  orBadgeGradient: {
+    alignItems: "center",
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+    borderRadius: 24,
+  },
+  orBadgeText: {
     color: "#B8C0FF",
     fontSize: 15,
     fontWeight: "900",
     letterSpacing: 4,
-    marginHorizontal: 14,
     textShadowColor: "rgba(140, 150, 255, 0.5)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
   drinkLabel: {
-    color: "#C4B5FD",
-    fontSize: 28,
+    color: "#E0D4FF",
+    fontSize: 36,
     fontWeight: "900",
     fontStyle: "italic",
     letterSpacing: 4,
+    marginTop: 8,
     textShadowColor: "rgba(139, 92, 246, 0.6)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 12,

@@ -37,12 +37,16 @@ export const styles = StyleSheet.create({
   shimmerGlow: { position: "absolute", top: 0, left: 0, width: 80, height: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 1 },
 
   /* Back button */
-  backButton: { position: "absolute", top: 12, left: 12, zIndex: 10, width: 44, height: 44, borderRadius: 22, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  backButton: { position: "absolute", top: 54, left: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   backButtonBlur: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 22 },
   backIcon: { color: "#FAFAFA", fontSize: 26, lineHeight: 28, marginTop: -2, fontWeight: "600" },
 
+  /* Settings button */
+  settingsButton: { position: "absolute", top: 54, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  settingsIcon: { fontSize: 20 },
+
   /* Mode tag */
-  modeTag: { position: "absolute", top: 14, right: 14, zIndex: 10, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
+  modeTag: { position: "absolute", top: 58, right: 16, zIndex: 10, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
   modeTagBlur: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   modeTagText: { color: "#A1A1AA", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 },
 
